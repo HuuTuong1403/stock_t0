@@ -14,7 +14,8 @@ export async function GET(request: NextRequest) {
     const filter: any = {};
 
     if (stockCode) {
-      filter.stockCode = stockCode === "all" ? { $exists: true } : stockCode.toUpperCase();
+      filter.stockCode =
+        stockCode === "all" ? { $exists: true } : stockCode.toUpperCase();
     }
 
     if (startDate || endDate) {

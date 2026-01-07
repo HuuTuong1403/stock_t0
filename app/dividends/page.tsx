@@ -55,6 +55,7 @@ interface Dividend {
   stockCode: string;
   type: "STOCK" | "CASH";
   value: number;
+  isUsed: boolean;
 }
 
 interface Stock {
@@ -82,6 +83,7 @@ export default function DividendsPage() {
     stockCode: "",
     type: "CASH" as "STOCK" | "CASH",
     value: "",
+    isUsed: false,
   });
 
   const fetchDividends = useCallback(async () => {
@@ -157,6 +159,7 @@ export default function DividendsPage() {
       stockCode: dividend.stockCode,
       type: dividend.type,
       value: dividend.value.toString(),
+      isUsed: dividend.isUsed,
     });
     setIsDialogOpen(true);
   };
@@ -180,6 +183,7 @@ export default function DividendsPage() {
       stockCode: "",
       type: "CASH",
       value: "",
+      isUsed: false,
     });
   };
 
@@ -566,7 +570,7 @@ export default function DividendsPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            {dividend.type === "STOCK" && (
+                            {dividend.type === "STOCK" && !dividend.isUsed && (
                               <Button
                                 size="icon"
                                 variant="ghost"

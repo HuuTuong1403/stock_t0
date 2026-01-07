@@ -1,6 +1,6 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema, Document, Model } from "mongoose";
 
-export type DividendType = 'STOCK' | 'CASH';
+export type DividendType = "STOCK" | "CASH";
 
 export interface IDividend extends Document {
   dividendDate: Date;
@@ -15,23 +15,27 @@ const DividendSchema: Schema = new Schema(
   {
     dividendDate: {
       type: Date,
-      required: [true, 'Ngày chia tách là bắt buộc'],
+      required: [true, "Ngày chia tách là bắt buộc"],
     },
     stockCode: {
       type: String,
-      required: [true, 'Mã cổ phiếu là bắt buộc'],
+      required: [true, "Mã cổ phiếu là bắt buộc"],
       uppercase: true,
       trim: true,
     },
     type: {
       type: String,
-      enum: ['STOCK', 'CASH'],
-      required: [true, 'Loại chia tách là bắt buộc'],
+      enum: ["STOCK", "CASH"],
+      required: [true, "Loại chia tách là bắt buộc"],
     },
     value: {
       type: Number,
-      required: [true, 'Giá trị chia tách là bắt buộc'],
-      min: [0, 'Giá trị không được âm'],
+      required: [true, "Giá trị chia tách là bắt buộc"],
+      min: [0, "Giá trị không được âm"],
+    },
+    isUsed: {
+      type: Boolean,
+      default: false,
     },
   },
   {
@@ -40,7 +44,7 @@ const DividendSchema: Schema = new Schema(
 );
 
 const Dividend: Model<IDividend> =
-  mongoose.models.Dividend || mongoose.model<IDividend>('Dividend', DividendSchema);
+  mongoose.models.Dividend ||
+  mongoose.model<IDividend>("Dividend", DividendSchema);
 
 export default Dividend;
-
