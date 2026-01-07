@@ -53,6 +53,7 @@ interface Stats {
   longTermPortfolio: Array<{
     stockCode: string;
     quantity: number;
+    quantitySell: number;
     averageCostBasis: number;
     marketPrice: number;
     currentCostBasis: number;
@@ -555,6 +556,7 @@ export default function DashboardPage() {
                 </TableHeader>
                 <TableBody>
                   {stats.longTermPortfolio.map((stock) => {
+                    console.log("🚀 => stock:", stock)
                     const profitByAvg =
                       stock.marketPrice - stock.averageCostBasis;
                     const profitByCurrent =
@@ -582,7 +584,7 @@ export default function DashboardPage() {
                           </span>
                         </TableCell>
                         <TableCell className="text-right text-slate-200">
-                          {formatCurrency(stock.quantity)}
+                          {formatCurrency(stock.quantity - stock.quantitySell)}
                         </TableCell>
                         <TableCell className="text-right text-slate-200">
                           {stock.averageCostBasis > 0

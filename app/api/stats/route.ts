@@ -215,7 +215,16 @@ export async function GET() {
               $cond: {
                 if: { $eq: ["$type", "BUY"] },
                 then: "$quantity",
-                else: { $multiply: ["$quantity", -1] },
+                else: 0,
+              },
+            },
+          },
+          totalQuantitySell: {
+            $sum: {
+              $cond: {
+                if: { $eq: ["$type", "SELL"] },
+                then: "$quantity",
+                else: 0,
               },
             },
           },
@@ -262,6 +271,7 @@ export async function GET() {
         $project: {
           stockCode: "$_id",
           quantity: "$totalQuantity",
+          quantitySell: "$totalQuantitySell",
           averageCostBasis: {
             $cond: {
               if: { $gt: ["$totalCostBasis", 0] },
