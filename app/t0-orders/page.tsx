@@ -38,6 +38,7 @@ import {
 import { Plus, Pencil, Trash2, Zap, Filter, X } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency, formatDate, formatDateInput } from "@/lib/format";
+import { ImportExportDialog } from "@/components/ImportExportDialog";
 
 interface T0Order {
   _id: string;
@@ -273,6 +274,7 @@ export default function T0OrdersPage() {
         </div>
 
         <div className="flex gap-2">
+          <ImportExportDialog type="t0-orders" onSuccess={fetchOrders} />
           <Button
             variant="outline"
             onClick={() => setShowFilters(!showFilters)}

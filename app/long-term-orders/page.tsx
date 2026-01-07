@@ -39,6 +39,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2, TrendingUp, Filter, X } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency, formatDate, formatDateInput } from "@/lib/format";
+import { ImportExportDialog } from "@/components/ImportExportDialog";
 
 interface LongTermOrder {
   _id: string;
@@ -332,6 +333,7 @@ export default function LongTermOrdersPage() {
         </div>
 
         <div className="flex gap-2">
+          <ImportExportDialog type="long-term-orders" onSuccess={fetchOrders} />
           <Button
             variant="outline"
             onClick={() => setShowFilters(!showFilters)}

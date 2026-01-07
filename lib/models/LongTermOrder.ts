@@ -104,10 +104,11 @@ LongTermOrderSchema.pre("save", async function () {
       this.isModified("quantity") ||
       this.isModified("tradeDate")
     ) {
+      // Only take BUY orders strictly before this SELL order's trade date
       const buyOrders = await mongoose.models.LongTermOrder.find({
         stockCode: doc.stockCode,
         type: "BUY",
-        tradeDate: { $lte: doc.tradeDate },
+        tradeDate: { $lt: doc.tradeDate },
       }).sort({ tradeDate: 1, createdAt: 1 });
 
       if (buyOrders.length > 0) {
@@ -125,11 +126,9 @@ LongTermOrderSchema.pre("save", async function () {
         const sellValue = doc.quantity * doc.price;
         const feeAndTaxRate = doc.feeRate + doc.taxRate;
 
-        const remainingQtyAfterSell = totalBuyQuantity - doc.quantity;
-
         const firstPart = sellValue - sellValue * feeAndTaxRate;
 
-        const secondPart = remainingQtyAfterSell * averageCostPerShare;
+        const secondPart = doc.quantity * averageCostPerShare;
 
         doc.profit = Math.round(firstPart - secondPart);
       } else {

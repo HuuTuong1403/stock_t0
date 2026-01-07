@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate, formatDateInput, formatPercent } from "@/lib/format";
+import { ImportExportDialog } from "@/components/ImportExportDialog";
 
 interface Dividend {
   _id: string;
@@ -253,6 +254,7 @@ export default function DividendsPage() {
         </div>
 
         <div className="flex gap-2">
+          <ImportExportDialog type="dividends" onSuccess={fetchDividends} />
           <Button
             variant="outline"
             onClick={() => setShowFilters(!showFilters)}
