@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     const excelData = orders.map((order) => ({
       "Ngày giao dịch": new Date(order.tradeDate).toLocaleDateString("vi-VN"),
       "Mã CP": order.stockCode,
-      "CTCK": typeof order.companyId === "object" ? order.companyId?.name : "-",
+      "CTCK": typeof order.companyId === "object" ? (order.companyId as unknown as { name: string })?.name : "-",
       "Số lượng": order.quantity,
       "Giá mua": order.buyPrice,
       "Giá bán": order.sellPrice,
