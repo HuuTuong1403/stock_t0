@@ -99,7 +99,7 @@ export default function RegisterPage() {
 
   if (canRegister === null) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 lg:-ml-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400"></div>
       </div>
     );
@@ -107,7 +107,7 @@ export default function RegisterPage() {
 
   if (canRegister === false) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 lg:-ml-64">
         <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-xl">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-bold text-center text-white">
@@ -131,7 +131,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950">
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 lg:-ml-64">
       <Card className="w-full max-w-md bg-slate-900 border-slate-800 shadow-xl">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold text-center text-white">

@@ -12,9 +12,18 @@ import {
   Landmark,
   Menu,
   X,
+  Lock,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -35,6 +44,11 @@ export default function Sidebar() {
     avatar?: string;
     type?: string;
   } | null>(null);
+  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   useEffect(() => {
     if (pathname === "/login") return;
@@ -75,7 +89,55 @@ export default function Sidebar() {
     router.refresh();
   };
 
-  if (pathname === "/login") {
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast.error("Vui lòng điền đầy đủ thông tin");
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      toast.error("Mật khẩu mới phải có ít nhất 6 ký tự");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast.error("Mật khẩu mới và xác nhận mật khẩu không khớp");
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+        }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        toast.error(error.error || "Đổi mật khẩu thất bại");
+        return;
+      }
+
+      toast.success("Đổi mật khẩu thành công");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setIsPopoverOpen(false);
+    } catch (error) {
+      console.error("Change password error:", error);
+      toast.error("Không thể đổi mật khẩu, vui lòng thử lại");
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  if (pathname === "/login" || pathname === "/register") {
     return null;
   }
 
@@ -145,19 +207,103 @@ export default function Sidebar() {
           {/* Footer */}
           <div className="border-t border-slate-700/50 p-4 space-y-3">
             {userInfo && (
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-slate-700 flex items-center justify-center text-sm font-semibold text-emerald-300">
-                  {initials}
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm text-white truncate">
-                    {userInfo.fullName || userInfo.username}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {userInfo.type === "admin" ? "Admin" : "Người dùng"}
-                  </p>
-                </div>
-              </div>
+              <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <div
+                    className="flex items-center gap-3 cursor-pointer hover:bg-slate-700/50 rounded-lg p-2 -m-2 transition-colors"
+                    onMouseEnter={() => setIsPopoverOpen(true)}
+                    onMouseLeave={() => setIsPopoverOpen(false)}
+                  >
+                    <div className="h-10 w-10 rounded-full bg-slate-700 flex items-center justify-center text-sm font-semibold text-emerald-300">
+                      {initials}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm text-white truncate">
+                        {userInfo.fullName || userInfo.username}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {userInfo.type === "admin" ? "Admin" : "Người dùng"}
+                      </p>
+                    </div>
+                  </div>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-80 bg-slate-800 border-slate-700"
+                  side="right"
+                  align="start"
+                  onMouseEnter={() => setIsPopoverOpen(true)}
+                  onMouseLeave={() => setIsPopoverOpen(false)}
+                >
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-white flex items-center gap-2">
+                        <Lock className="h-4 w-4" />
+                        Đổi mật khẩu
+                      </h4>
+                      <p className="text-sm text-slate-400">
+                        Nhập mật khẩu hiện tại và mật khẩu mới
+                      </p>
+                    </div>
+                    <form onSubmit={handleChangePassword} className="space-y-3">
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="currentPassword"
+                          className="text-slate-300"
+                        >
+                          Mật khẩu hiện tại
+                        </Label>
+                        <Input
+                          id="currentPassword"
+                          type="password"
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
+                          className="bg-slate-900 border-slate-600 text-white"
+                          placeholder="Nhập mật khẩu hiện tại"
+                          disabled={isChangingPassword}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="newPassword" className="text-slate-300">
+                          Mật khẩu mới
+                        </Label>
+                        <Input
+                          id="newPassword"
+                          type="password"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          className="bg-slate-900 border-slate-600 text-white"
+                          placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)"
+                          disabled={isChangingPassword}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="confirmPassword"
+                          className="text-slate-300"
+                        >
+                          Xác nhận mật khẩu mới
+                        </Label>
+                        <Input
+                          id="confirmPassword"
+                          type="password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          className="bg-slate-900 border-slate-600 text-white"
+                          placeholder="Nhập lại mật khẩu mới"
+                          disabled={isChangingPassword}
+                        />
+                      </div>
+                      <Button
+                        type="submit"
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                        disabled={isChangingPassword}
+                      >
+                        {isChangingPassword ? "Đang xử lý..." : "Đổi mật khẩu"}
+                      </Button>
+                    </form>
+                  </div>
+                </PopoverContent>
+              </Popover>
             )}
             <Button
               onClick={handleLogout}
