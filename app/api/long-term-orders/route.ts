@@ -19,10 +19,7 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get("endDate");
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const filter: any = {};
-    if (user.type !== "admin") {
-      filter.userId = user._id;
-    }
+    const filter: any = { userId: user._id };
 
     if (stockCode) {
       filter.stockCode =
@@ -69,7 +66,7 @@ export async function POST(request: NextRequest) {
     // Get the company to fetch fee rates
     const company = await StockCompany.findOne({
       _id: body.companyId,
-      ...(user.type !== "admin" ? { userId: user._id } : {}),
+      userId: user._id,
     });
     if (!company) {
       return NextResponse.json(

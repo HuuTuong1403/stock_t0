@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { user } = auth;
-    const filter = user.type === "admin" ? {} : { userId: user._id };
+    const filter = { userId: user._id };
 
     const orders = await LongTermOrder.find(filter)
       .populate({ path: "companyId", select: "name", strictPopulate: false })
@@ -22,12 +22,15 @@ export async function GET(request: NextRequest) {
     const excelData = orders.map((order) => ({
       "Ngày giao dịch": new Date(order.tradeDate).toLocaleDateString("vi-VN"),
       "Mã CP": order.stockCode,
-      "CTCK": typeof order.companyId === "object" ? (order.companyId as unknown as { name: string })?.name : "-",
-      "Loại": order.type === "BUY" ? "MUA" : "BÁN",
+      CTCK:
+        typeof order.companyId === "object"
+          ? (order.companyId as unknown as { name: string })?.name
+          : "-",
+      Loại: order.type === "BUY" ? "MUA" : "BÁN",
       "Số lượng": order.quantity,
-      "Giá": order.price,
-      "Phí": order.fee,
-      "Thuế": order.tax,
+      Giá: order.price,
+      Phí: order.fee,
+      Thuế: order.tax,
       "Giá vốn": order.costBasis,
       "Lợi nhuận": order.profit,
     }));
@@ -58,8 +61,11 @@ export async function GET(request: NextRequest) {
 
     return new NextResponse(buffer, {
       headers: {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="long-term-orders-${new Date().toISOString().split("T")[0]}.xlsx"`,
+        "Content-Type":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="long-term-orders-${
+          new Date().toISOString().split("T")[0]
+        }.xlsx"`,
       },
     });
   } catch (error) {
@@ -70,4 +76,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

@@ -75,7 +75,7 @@ export default function Sidebar() {
     router.refresh();
   };
 
-  if (["/login", "/register"].includes(pathname)) {
+  if (pathname === "/login") {
     return null;
   }
 

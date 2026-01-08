@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document, Model } from "mongoose";
+import mongoose, { Schema, Document, Model, Types } from "mongoose";
 
 export interface IStock extends Document {
   code: string;
@@ -7,6 +7,7 @@ export interface IStock extends Document {
   currentCostBasis: number;
   createdAt: Date;
   updatedAt: Date;
+  userId: Types.ObjectId;
 }
 
 const StockSchema: Schema = new Schema(
@@ -33,6 +34,12 @@ const StockSchema: Schema = new Schema(
       type: Number,
       default: 0,
       min: [0, "Giá vốn không được âm"],
+    },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
     },
   },
   {

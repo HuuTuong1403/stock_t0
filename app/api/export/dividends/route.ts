@@ -12,15 +12,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { user } = auth;
-    const filter = user.type === "admin" ? {} : { userId: user._id };
+    const filter = { userId: user._id };
 
     const dividends = await Dividend.find(filter).sort({ dividendDate: -1 });
 
     // Prepare data for Excel
     const excelData = dividends.map((dividend) => ({
-      "Ngày chia tách": new Date(dividend.dividendDate).toLocaleDateString("vi-VN"),
+      "Ngày chia tách": new Date(dividend.dividendDate).toLocaleDateString(
+        "vi-VN"
+      ),
       "Mã CP": dividend.stockCode,
-      "Loại": dividend.type === "STOCK" ? "Cổ phiếu" : "Tiền mặt",
+      Loại: dividend.type === "STOCK" ? "Cổ phiếu" : "Tiền mặt",
       "Giá trị": dividend.value,
     }));
 
@@ -44,8 +46,11 @@ export async function GET(request: NextRequest) {
 
     return new NextResponse(buffer, {
       headers: {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="dividends-${new Date().toISOString().split("T")[0]}.xlsx"`,
+        "Content-Type":
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="dividends-${
+          new Date().toISOString().split("T")[0]
+        }.xlsx"`,
       },
     });
   } catch (error) {
@@ -56,4 +61,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

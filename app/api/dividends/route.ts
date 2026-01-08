@@ -16,13 +16,13 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get("type");
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const filter: any = {};
-    if (user.type !== "admin") {
-      filter.userId = user._id;
-    }
+    const filter: any = {
+      userId: user._id,
+    };
 
     if (stockCode) {
-      filter.stockCode = stockCode === "all" ? { $exists: true } : stockCode.toUpperCase();
+      filter.stockCode =
+        stockCode === "all" ? { $exists: true } : stockCode.toUpperCase();
     }
 
     if (type && (type === "STOCK" || type === "CASH")) {

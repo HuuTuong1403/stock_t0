@@ -23,6 +23,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       _id: dividendId,
       userId,
     });
+
     if (!dividend) {
       return NextResponse.json(
         { error: "Không tìm thấy cổ tức" },
@@ -51,7 +52,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     const dividend = await Dividend.findOneAndUpdate(
       {
         _id: dividendId,
-        ...(user.type !== "admin" ? { userId } : {}),
+        userId,
       },
       body,
       {
@@ -88,7 +89,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const userId = new Types.ObjectId(String(user._id));
     const dividend = await Dividend.findOneAndDelete({
       _id: dividendId,
-      ...(user.type !== "admin" ? { userId } : {}),
+      userId,
     });
     if (!dividend) {
       return NextResponse.json(

@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get all companies for lookup
-    const companyFilter = user.type === "admin" ? {} : { userId: user._id };
+    const companyFilter = { userId: user._id };
     const companies = await StockCompany.find(companyFilter);
     const companyMap = new Map(companies.map((c) => [c.name, c._id.toString()]));
 

@@ -99,7 +99,7 @@ async function main() {
   // ============================================
 
   // Ví dụ: Thêm field userId cho documents chưa có
-  const res = await StockCompany.updateMany(
+  const res = await Stock.updateMany(
     { userId: { $exists: false } }, // Lọc documents chưa có userId
     {
       $set: {

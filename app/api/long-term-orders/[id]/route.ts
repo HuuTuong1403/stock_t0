@@ -19,7 +19,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const order = await LongTermOrder.findOne(
       {
         _id: id,
-        ...(user.type !== "admin" ? { userId: user._id } : {}),
+        userId: user._id,
       }
     ).populate({ path: "companyId", select: "name", strictPopulate: false });
     if (!order) {
@@ -51,7 +51,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     const order = await LongTermOrder.findOne({
       _id: id,
-      ...(user.type !== "admin" ? { userId: user._id } : {}),
+      userId: user._id,
     });
     if (!order) {
       return NextResponse.json(
@@ -69,7 +69,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       const companyId = body.companyId || order.companyId;
       const company = await StockCompany.findOne({
         _id: companyId,
-        ...(user.type !== "admin" ? { userId: user._id } : {}),
+        userId: user._id,
       });
       if (!company) {
         return NextResponse.json(
@@ -107,7 +107,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const { id } = await params;
     const order = await LongTermOrder.findOneAndDelete({
       _id: id,
-      ...(user.type !== "admin" ? { userId: user._id } : {}),
+      userId: user._id,
     });
     if (!order) {
       return NextResponse.json(

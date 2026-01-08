@@ -11,12 +11,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { user } = auth;
-    const ownerFilter = user.type === "admin" ? {} : { userId: user._id };
+    const ownerFilter = { userId: user._id };
 
     // Get counts
     const [stockCount, t0OrderCount, longTermOrderCount, dividendCount] =
       await Promise.all([
-        Stock.countDocuments(),
+        Stock.countDocuments(ownerFilter),
         T0Order.countDocuments(ownerFilter),
         LongTermOrder.countDocuments(ownerFilter),
         Dividend.countDocuments(ownerFilter),

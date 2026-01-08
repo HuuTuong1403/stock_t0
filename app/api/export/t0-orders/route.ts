@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { user } = auth;
-    const filter = user.type === "admin" ? {} : { userId: user._id };
+    const filter = { userId: user._id };
 
     const orders = await T0Order.find(filter)
       .populate({ path: "companyId", select: "name", strictPopulate: false })

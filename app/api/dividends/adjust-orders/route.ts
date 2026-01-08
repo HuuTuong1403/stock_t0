@@ -29,8 +29,9 @@ export async function POST(request: NextRequest) {
     // Get dividend information
     const dividend = await Dividend.findOne({
       _id: dividendId,
-      ...(user.type !== "admin" ? { userId: user._id } : {}),
+      userId: user._id,
     });
+
     if (!dividend) {
       return NextResponse.json(
         { error: "Không tìm thấy cổ tức" },
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
     const longTermOrders = await LongTermOrder.find({
       stockCode: dividend.stockCode,
       tradeDate: { $lt: dividend.dividendDate },
-      ...(user.type !== "admin" ? { userId: user._id } : {}),
+      userId: user._id,
     });
 
     let adjustedCount = 0;

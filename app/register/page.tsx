@@ -28,7 +28,8 @@ export default function RegisterPage() {
       try {
         const res = await fetch("/api/auth/me");
         if (res.ok) {
-          const user = await res.json();
+          const { user } = await res.json();
+
           if (user.type === "admin") {
             setCanRegister(true);
             return;
@@ -115,7 +116,8 @@ export default function RegisterPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-center text-slate-400">
-              Chỉ admin mới có thể tạo tài khoản mới. Vui lòng liên hệ admin để được tạo tài khoản.
+              Chỉ admin mới có thể tạo tài khoản mới. Vui lòng liên hệ admin để
+              được tạo tài khoản.
             </p>
             <Link href="/login">
               <Button className="w-full bg-cyan-500 hover:bg-cyan-600 text-white">
@@ -258,4 +260,3 @@ export default function RegisterPage() {
     </div>
   );
 }
-

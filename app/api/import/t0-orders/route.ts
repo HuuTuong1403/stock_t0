@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { user } = auth;
-    
+
     const formData = await request.formData();
     const file = formData.get("file") as File;
 
@@ -37,9 +37,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Get all companies for lookup
-    const companyFilter = user.type === "admin" ? {} : { userId: user._id };
+    const companyFilter = { userId: user._id };
     const companies = await StockCompany.find(companyFilter);
-    const companyMap = new Map(companies.map((c) => [c.name, c._id.toString()]));
+    const companyMap = new Map(
+      companies.map((c) => [c.name, c._id.toString()])
+    );
 
     const results = {
       success: 0,
@@ -51,17 +53,26 @@ export async function POST(request: NextRequest) {
     for (let i = 0; i < data.length; i++) {
       try {
         const row = data[i] as Record<string, unknown>;
-        
+
         // Map Excel columns to model fields
         const tradeDateStr = String(row["Ngày giao dịch"] || "");
-        const stockCode = String(row["Mã CP"] || "").toUpperCase().trim();
+        const stockCode = String(row["Mã CP"] || "")
+          .toUpperCase()
+          .trim();
         const companyName = String(row["CTCK"] || "").trim();
         const quantity = Number(row["Số lượng"] || 0);
         const buyPrice = Number(row["Giá mua"] || 0);
         const sellPrice = Number(row["Giá bán"] || 0);
 
         // Validation
-        if (!tradeDateStr || !stockCode || !companyName || !quantity || !buyPrice || !sellPrice) {
+        if (
+          !tradeDateStr ||
+          !stockCode ||
+          !companyName ||
+          !quantity ||
+          !buyPrice ||
+          !sellPrice
+        ) {
           results.failed++;
           results.errors.push(`Dòng ${i + 2}: Thiếu thông tin bắt buộc`);
           continue;
@@ -83,10 +94,14 @@ export async function POST(request: NextRequest) {
             company = companies.find((c) => c._id.toString() === companyId);
           }
         }
-        
+
         if (!company) {
           results.failed++;
-          results.errors.push(`Dòng ${i + 2}: Không tìm thấy công ty chứng khoán "${companyName}" (nhập ID hoặc tên công ty)`);
+          results.errors.push(
+            `Dòng ${
+              i + 2
+            }: Không tìm thấy công ty chứng khoán "${companyName}" (nhập ID hoặc tên công ty)`
+          );
           continue;
         }
 
@@ -110,7 +125,9 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         results.failed++;
         results.errors.push(
-          `Dòng ${i + 2}: ${error instanceof Error ? error.message : "Lỗi không xác định"}`
+          `Dòng ${i + 2}: ${
+            error instanceof Error ? error.message : "Lỗi không xác định"
+          }`
         );
       }
     }
@@ -127,4 +144,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
