@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document, Model } from "mongoose";
+import mongoose, { Schema, Document, Model, Types } from "mongoose";
 
 export type DividendType = "STOCK" | "CASH";
 
@@ -7,7 +7,7 @@ export interface IDividend extends Document {
   stockCode: string;
   type: DividendType;
   value: number;
-  userId: Schema.Types.ObjectId;
+  userId: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }

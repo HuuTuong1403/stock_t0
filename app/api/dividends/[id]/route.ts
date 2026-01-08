@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Types } from "mongoose";
 import dbConnect from "@/lib/mongodb";
 import { Dividend } from "@/lib/models";
 import { requireAuth } from "@/lib/auth";
@@ -16,9 +17,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
     const { user } = auth;
     const { id } = await params;
+    const dividendId = new Types.ObjectId(id);
+    const userId = new Types.ObjectId(String(user._id));
     const dividend = await Dividend.findOne({
-      _id: id,
-      ...(user.type !== "admin" ? { userId: user._id } : {}),
+      _id: dividendId,
+      userId,
     });
     if (!dividend) {
       return NextResponse.json(
@@ -42,17 +45,19 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
     const { user } = auth;
     const { id } = await params;
+    const dividendId = new Types.ObjectId(id);
+    const userId = new Types.ObjectId(String(user._id));
     const body = await request.json();
     const dividend = await Dividend.findOneAndUpdate(
       {
-        _id: id,
-        ...(user.type !== "admin" ? { userId: user._id } : {}),
+        _id: dividendId,
+        ...(user.type !== "admin" ? { userId } : {}),
       },
       body,
       {
-      new: true,
-      runValidators: true,
-    }
+        new: true,
+        runValidators: true,
+      }
     );
     if (!dividend) {
       return NextResponse.json(
@@ -79,9 +84,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
     const { user } = auth;
     const { id } = await params;
+    const dividendId = new Types.ObjectId(id);
+    const userId = new Types.ObjectId(String(user._id));
     const dividend = await Dividend.findOneAndDelete({
-      _id: id,
-      ...(user.type !== "admin" ? { userId: user._id } : {}),
+      _id: dividendId,
+      ...(user.type !== "admin" ? { userId } : {}),
     });
     if (!dividend) {
       return NextResponse.json(
