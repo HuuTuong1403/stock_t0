@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { T0Order, StockCompany } from "@/lib/models";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
     await dbConnect();
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { user } = auth;
+
     const searchParams = request.nextUrl.searchParams;
     const stockCode = searchParams.get("stockCode");
     const startDate = searchParams.get("startDate");
@@ -12,6 +19,9 @@ export async function GET(request: NextRequest) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const filter: any = {};
+    if (user.type !== "admin") {
+      filter.userId = user._id;
+    }
 
     if (stockCode) {
       filter.stockCode =
@@ -44,10 +54,18 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     await dbConnect();
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { user } = auth;
     const body = await request.json();
 
     // Get the company to fetch fee rates
-    const company = await StockCompany.findById(body.companyId);
+    const company = await StockCompany.findOne({
+      _id: body.companyId,
+      ...(user.type !== "admin" ? { userId: user._id } : {}),
+    });
     if (!company) {
       return NextResponse.json(
         { error: "Không tìm thấy công ty chứng khoán" },
@@ -61,6 +79,7 @@ export async function POST(request: NextRequest) {
       buyFeeRate: company.buyFeeRate,
       sellFeeRate: company.sellFeeRate,
       taxRate: company.taxRate,
+      userId: user._id,
     };
 
     const order = new T0Order(orderData);

@@ -320,6 +320,19 @@ export default function LongTermOrdersPage() {
     return totalBuy - totalSell;
   };
 
+  // Calculate and format holding time
+  const formatHoldingTime = (tradeDate: string) => {
+    const tradeDateTime = new Date(tradeDate).getTime();
+    const now = new Date().getTime();
+    const diffMs = now - tradeDateTime;
+
+    if (diffMs < 0) return "Chưa đến";
+
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    return `${diffDays} ngày`;
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -687,6 +700,9 @@ export default function LongTermOrdersPage() {
                       Ngày
                     </TableHead>
                     <TableHead className="text-slate-300 font-semibold">
+                      Thời gian nắm giữ
+                    </TableHead>
+                    <TableHead className="text-slate-300 font-semibold">
                       Mã CP
                     </TableHead>
                     <TableHead className="text-slate-300 font-semibold">
@@ -722,7 +738,7 @@ export default function LongTermOrdersPage() {
                   {orders.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={11}
+                        colSpan={12}
                         className="text-center text-slate-500 py-8"
                       >
                         Chưa có lệnh giao dịch nào
@@ -738,6 +754,9 @@ export default function LongTermOrdersPage() {
                         >
                           <TableCell className="text-slate-300">
                             {formatDate(order.tradeDate)}
+                          </TableCell>
+                          <TableCell className="text-slate-400 text-sm">
+                            {formatHoldingTime(order.tradeDate)}
                           </TableCell>
                           <TableCell>
                             <span className="font-mono font-semibold text-cyan-400">

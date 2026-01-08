@@ -2,10 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { LongTermOrder, StockCompany } from "@/lib/models";
 import * as XLSX from "xlsx";
+import { requireAuth } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
     await dbConnect();
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { user } = auth;
     
     const formData = await request.formData();
     const file = formData.get("file") as File;
@@ -31,7 +37,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Get all companies for lookup
-    const companies = await StockCompany.find({});
+    const companyFilter = user.type === "admin" ? {} : { userId: user._id };
+    const companies = await StockCompany.find(companyFilter);
     const companyMap = new Map(companies.map((c) => [c.name, c._id.toString()]));
 
     const results = {
@@ -97,6 +104,7 @@ export async function POST(request: NextRequest) {
           tradeDate,
           stockCode,
           companyId: company._id.toString(),
+          userId: user._id,
           type,
           quantity,
           price,

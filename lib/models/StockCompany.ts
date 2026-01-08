@@ -6,6 +6,7 @@ export interface IStockCompany extends Document {
   sellFeeRate: number;
   taxRate: number;
   isDefault: boolean;
+  userId: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -15,7 +16,6 @@ const StockCompanySchema = new mongoose.Schema(
     name: {
       type: String,
       required: [true, "Tên công ty chứng khoán là bắt buộc"],
-      unique: true,
       trim: true,
     },
     buyFeeRate: {
@@ -40,11 +40,19 @@ const StockCompanySchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
   },
   {
     timestamps: true,
   }
 );
+
+StockCompanySchema.index({ userId: 1, name: 1 }, { unique: true });
 
 const StockCompany: Model<IStockCompany> =
   mongoose.models.StockCompany ||

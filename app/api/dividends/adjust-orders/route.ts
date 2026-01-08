@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { Dividend, LongTermOrder } from "@/lib/models";
+import { requireAuth } from "@/lib/auth";
 
 /**
  * Adjust stock orders based on dividend split
@@ -10,6 +11,11 @@ import { Dividend, LongTermOrder } from "@/lib/models";
 export async function POST(request: NextRequest) {
   try {
     await dbConnect();
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { user } = auth;
     const body = await request.json();
     const { dividendId } = body;
 
@@ -21,7 +27,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Get dividend information
-    const dividend = await Dividend.findById(dividendId);
+    const dividend = await Dividend.findOne({
+      _id: dividendId,
+      ...(user.type !== "admin" ? { userId: user._id } : {}),
+    });
     if (!dividend) {
       return NextResponse.json(
         { error: "Không tìm thấy cổ tức" },
@@ -44,6 +53,7 @@ export async function POST(request: NextRequest) {
     const longTermOrders = await LongTermOrder.find({
       stockCode: dividend.stockCode,
       tradeDate: { $lt: dividend.dividendDate },
+      ...(user.type !== "admin" ? { userId: user._id } : {}),
     });
 
     let adjustedCount = 0;

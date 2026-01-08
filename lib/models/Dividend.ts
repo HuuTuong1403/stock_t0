@@ -7,6 +7,7 @@ export interface IDividend extends Document {
   stockCode: string;
   type: DividendType;
   value: number;
+  userId: Schema.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -16,6 +17,12 @@ const DividendSchema: Schema = new Schema(
     dividendDate: {
       type: Date,
       required: [true, "Ngày chia tách là bắt buộc"],
+    },
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
     },
     stockCode: {
       type: String,

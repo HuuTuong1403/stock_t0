@@ -5,8 +5,10 @@ export {
   type ILongTermOrder,
   type OrderType,
 } from "./LongTermOrder";
-export { default as Dividend, type IDividend, type DividendType } from "./Dividend";
 export {
-  default as StockCompany,
-  type IStockCompany,
-} from "./StockCompany";
+  default as Dividend,
+  type IDividend,
+  type DividendType,
+} from "./Dividend";
+export { default as StockCompany, type IStockCompany } from "./StockCompany";
+export { default as User, type IUser, type UserType } from "./User";

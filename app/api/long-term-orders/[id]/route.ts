@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { LongTermOrder, StockCompany } from "@/lib/models";
+import { requireAuth } from "@/lib/auth";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -9,8 +10,18 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     await dbConnect();
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { user } = auth;
     const { id } = await params;
-    const order = await LongTermOrder.findById(id).populate({ path: "companyId", select: "name", strictPopulate: false });
+    const order = await LongTermOrder.findOne(
+      {
+        _id: id,
+        ...(user.type !== "admin" ? { userId: user._id } : {}),
+      }
+    ).populate({ path: "companyId", select: "name", strictPopulate: false });
     if (!order) {
       return NextResponse.json(
         { error: "Không tìm thấy lệnh dài hạn" },
@@ -30,10 +41,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
     await dbConnect();
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { user } = auth;
     const { id } = await params;
     const body = await request.json();
 
-    const order = await LongTermOrder.findById(id);
+    const order = await LongTermOrder.findOne({
+      _id: id,
+      ...(user.type !== "admin" ? { userId: user._id } : {}),
+    });
     if (!order) {
       return NextResponse.json(
         { error: "Không tìm thấy lệnh dài hạn" },
@@ -48,7 +67,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     if (companyChanged || typeChanged) {
       const companyId = body.companyId || order.companyId;
-      const company = await StockCompany.findById(companyId);
+      const company = await StockCompany.findOne({
+        _id: companyId,
+        ...(user.type !== "admin" ? { userId: user._id } : {}),
+      });
       if (!company) {
         return NextResponse.json(
           { error: "Không tìm thấy công ty chứng khoán" },
@@ -77,8 +99,16 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     await dbConnect();
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { user } = auth;
     const { id } = await params;
-    const order = await LongTermOrder.findByIdAndDelete(id);
+    const order = await LongTermOrder.findOneAndDelete({
+      _id: id,
+      ...(user.type !== "admin" ? { userId: user._id } : {}),
+    });
     if (!order) {
       return NextResponse.json(
         { error: "Không tìm thấy lệnh dài hạn" },

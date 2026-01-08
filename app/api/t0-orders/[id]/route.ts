@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { T0Order, StockCompany } from "@/lib/models";
+import { requireAuth } from "@/lib/auth";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -9,8 +10,18 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     await dbConnect();
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { user } = auth;
     const { id } = await params;
-    const order = await T0Order.findById(id).populate({ path: "companyId", select: "name", strictPopulate: false });
+    const order = await T0Order.findOne(
+      {
+        _id: id,
+        ...(user.type !== "admin" ? { userId: user._id } : {}),
+      }
+    ).populate({ path: "companyId", select: "name", strictPopulate: false });
     if (!order) {
       return NextResponse.json(
         { error: "Không tìm thấy lệnh T0" },
@@ -27,11 +38,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
     await dbConnect();
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { user } = auth;
     const { id } = await params;
     const body = await request.json();
 
     // Get the order
-    const order = await T0Order.findById(id);
+    const order = await T0Order.findOne({
+      _id: id,
+      ...(user.type !== "admin" ? { userId: user._id } : {}),
+    });
     if (!order) {
       return NextResponse.json(
         { error: "Không tìm thấy lệnh T0" },
@@ -41,7 +60,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     // If company changed, fetch new fee rates
     if (body.companyId && body.companyId !== order.companyId.toString()) {
-      const company = await StockCompany.findById(body.companyId);
+      const company = await StockCompany.findOne({
+        _id: body.companyId,
+        ...(user.type !== "admin" ? { userId: user._id } : {}),
+      });
       if (!company) {
         return NextResponse.json(
           { error: "Không tìm thấy công ty chứng khoán" },
@@ -70,8 +92,16 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     await dbConnect();
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { user } = auth;
     const { id } = await params;
-    const order = await T0Order.findByIdAndDelete(id);
+    const order = await T0Order.findOneAndDelete({
+      _id: id,
+      ...(user.type !== "admin" ? { userId: user._id } : {}),
+    });
     if (!order) {
       return NextResponse.json(
         { error: "Không tìm thấy lệnh T0" },

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { StockCompany } from "@/lib/models";
+import { requireAuth } from "@/lib/auth";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -9,8 +10,16 @@ interface RouteParams {
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     await dbConnect();
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { user } = auth;
     const { id } = await params;
-    const company = await StockCompany.findById(id);
+    const company = await StockCompany.findOne({
+      _id: id,
+      userId: user._id,
+    });
     if (!company) {
       return NextResponse.json(
         { error: "Không tìm thấy công ty chứng khoán" },
@@ -30,18 +39,36 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
     await dbConnect();
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { user } = auth;
     const { id } = await params;
     const body = await request.json();
 
     // If this company is set as default, unset other defaults
     if (body.isDefault) {
-      await StockCompany.updateMany({ _id: { $ne: id } }, { isDefault: false });
+      await StockCompany.updateMany(
+        {
+          userId: user._id,
+          _id: { $ne: id },
+        },
+        { isDefault: false }
+      );
     }
 
-    const company = await StockCompany.findByIdAndUpdate(id, body, {
-      new: true,
-      runValidators: true,
-    });
+    const company = await StockCompany.findOneAndUpdate(
+      {
+        _id: id,
+        userId: user._id,
+      },
+      body,
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
     if (!company) {
       return NextResponse.json(
         { error: "Không tìm thấy công ty chứng khoán" },
@@ -67,8 +94,16 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     await dbConnect();
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { user } = auth;
     const { id } = await params;
-    const company = await StockCompany.findByIdAndDelete(id);
+    const company = await StockCompany.findOneAndDelete({
+      _id: id,
+      userId: user._id,
+    });
     if (!company) {
       return NextResponse.json(
         { error: "Không tìm thấy công ty chứng khoán" },

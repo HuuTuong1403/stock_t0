@@ -2,10 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { Dividend } from "@/lib/models";
 import * as XLSX from "xlsx";
+import { requireAuth } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
     await dbConnect();
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { user } = auth;
     
     const formData = await request.formData();
     const file = formData.get("file") as File;
@@ -80,6 +86,7 @@ export async function POST(request: NextRequest) {
           stockCode,
           type,
           value,
+          userId: user._id,
         });
 
         results.success++;

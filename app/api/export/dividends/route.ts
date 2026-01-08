@@ -2,12 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { Dividend } from "@/lib/models";
 import * as XLSX from "xlsx";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
     await dbConnect();
-    
-    const dividends = await Dividend.find({}).sort({ dividendDate: -1 });
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { user } = auth;
+    const filter = user.type === "admin" ? {} : { userId: user._id };
+
+    const dividends = await Dividend.find(filter).sort({ dividendDate: -1 });
 
     // Prepare data for Excel
     const excelData = dividends.map((dividend) => ({

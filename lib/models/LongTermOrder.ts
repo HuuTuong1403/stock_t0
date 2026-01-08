@@ -6,6 +6,7 @@ export interface ILongTermOrder extends Document {
   tradeDate: Date;
   stockCode: string;
   companyId: Types.ObjectId;
+  userId: Types.ObjectId;
   type: OrderType;
   quantity: number;
   price: number;
@@ -35,6 +36,12 @@ const LongTermOrderSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "StockCompany",
       required: [true, "Công ty chứng khoán là bắt buộc"],
+    },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
     },
     type: {
       type: String,

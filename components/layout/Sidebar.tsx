@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -13,7 +13,7 @@ import {
   Menu,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 const navigation = [
@@ -27,7 +27,57 @@ const navigation = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+  const [userInfo, setUserInfo] = useState<{
+    fullName?: string;
+    username?: string;
+    avatar?: string;
+    type?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (pathname === "/login") return;
+    const fetchUser = async () => {
+      try {
+        const res = await fetch("/api/auth/me");
+        if (!res.ok) return;
+        const data = await res.json();
+        setUserInfo(data.user);
+      } catch {
+        // ignore
+      }
+    };
+    fetchUser();
+  }, [pathname]);
+
+  const initials = useMemo(() => {
+    if (!userInfo) return "";
+    if (userInfo.fullName) {
+      return userInfo.fullName
+        .split(" ")
+        .filter(Boolean)
+        .map((part) => part[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase();
+    }
+    if (userInfo.username) {
+      return userInfo.username.slice(0, 2).toUpperCase();
+    }
+    return "";
+  }, [userInfo]);
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setUserInfo(null);
+    router.push("/login");
+    router.refresh();
+  };
+
+  if (["/login", "/register"].includes(pathname)) {
+    return null;
+  }
 
   return (
     <>
@@ -93,10 +143,29 @@ export default function Sidebar() {
           </nav>
 
           {/* Footer */}
-          <div className="border-t border-slate-700/50 p-4">
-            <p className="text-xs text-slate-500 text-center">
-              © 2026 Stock T0 Manager
-            </p>
+          <div className="border-t border-slate-700/50 p-4 space-y-3">
+            {userInfo && (
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-slate-700 flex items-center justify-center text-sm font-semibold text-emerald-300">
+                  {initials}
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-white truncate">
+                    {userInfo.fullName || userInfo.username}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {userInfo.type === "admin" ? "Admin" : "Người dùng"}
+                  </p>
+                </div>
+              </div>
+            )}
+            <Button
+              onClick={handleLogout}
+              className="w-full bg-slate-800 hover:bg-slate-700 text-slate-100"
+              variant="outline"
+            >
+              Đăng xuất
+            </Button>
           </div>
         </div>
       </aside>

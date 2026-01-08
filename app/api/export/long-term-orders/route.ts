@@ -2,12 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { LongTermOrder } from "@/lib/models";
 import * as XLSX from "xlsx";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
     await dbConnect();
-    
-    const orders = await LongTermOrder.find({})
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { user } = auth;
+    const filter = user.type === "admin" ? {} : { userId: user._id };
+
+    const orders = await LongTermOrder.find(filter)
       .populate({ path: "companyId", select: "name", strictPopulate: false })
       .sort({ tradeDate: -1 });
 

@@ -1,22 +1,30 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { Stock, T0Order, LongTermOrder, Dividend } from "@/lib/models";
+import { requireAuth } from "@/lib/auth";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     await dbConnect();
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { user } = auth;
+    const ownerFilter = user.type === "admin" ? {} : { userId: user._id };
 
     // Get counts
     const [stockCount, t0OrderCount, longTermOrderCount, dividendCount] =
       await Promise.all([
         Stock.countDocuments(),
-        T0Order.countDocuments(),
-        LongTermOrder.countDocuments(),
-        Dividend.countDocuments(),
+        T0Order.countDocuments(ownerFilter),
+        LongTermOrder.countDocuments(ownerFilter),
+        Dividend.countDocuments(ownerFilter),
       ]);
 
     // Get T0 profit summary
     const t0ProfitResult = await T0Order.aggregate([
+      { $match: ownerFilter },
       {
         $group: {
           _id: null,
@@ -30,7 +38,7 @@ export async function GET() {
 
     // Get long-term profit summary (only SELL orders have profit)
     const longTermProfitResult = await LongTermOrder.aggregate([
-      { $match: { type: "SELL" } },
+      { $match: { ...ownerFilter, type: "SELL" } },
       {
         $group: {
           _id: null,
@@ -41,6 +49,7 @@ export async function GET() {
 
     // Get dividend summary
     const dividendResult = await Dividend.aggregate([
+      { $match: ownerFilter },
       {
         $group: {
           _id: "$type",
@@ -51,7 +60,7 @@ export async function GET() {
     ]);
 
     // Get recent T0 orders
-    const recentT0Orders = await T0Order.find({})
+    const recentT0Orders = await T0Order.find(ownerFilter)
       .sort({ tradeDate: -1 })
       .limit(5)
       .select("tradeDate stockCode quantity profitAfterFees");
@@ -61,7 +70,7 @@ export async function GET() {
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
     const monthlyT0Profit = await T0Order.aggregate([
-      { $match: { tradeDate: { $gte: sixMonthsAgo } } },
+      { $match: { ...ownerFilter, tradeDate: { $gte: sixMonthsAgo } } },
       {
         $group: {
           _id: {
@@ -77,6 +86,7 @@ export async function GET() {
 
     // Get T0 stats by stock code
     const t0StatsByStock = await T0Order.aggregate([
+      { $match: ownerFilter },
       {
         $group: {
           _id: "$stockCode",
@@ -96,6 +106,7 @@ export async function GET() {
 
     // Get long-term stats by stock code
     const longTermStatsByStock = await LongTermOrder.aggregate([
+      { $match: ownerFilter },
       {
         $group: {
           _id: "$stockCode",
@@ -173,6 +184,7 @@ export async function GET() {
 
     // Get dividend stats by stock code
     const dividendStatsByStock = await Dividend.aggregate([
+      { $match: ownerFilter },
       {
         $group: {
           _id: "$stockCode",
@@ -207,6 +219,7 @@ export async function GET() {
 
     // Get long-term portfolio (current holdings with market price)
     const longTermPortfolio = await LongTermOrder.aggregate([
+      { $match: ownerFilter },
       {
         $group: {
           _id: "$stockCode",

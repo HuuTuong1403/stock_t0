@@ -4,6 +4,7 @@ export interface IT0Order extends Document {
   tradeDate: Date;
   stockCode: string;
   companyId: Types.ObjectId;
+  userId: Types.ObjectId;
   quantity: number;
   buyPrice: number;
   sellPrice: number;
@@ -37,6 +38,12 @@ const T0OrderSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "StockCompany",
       required: [true, "Công ty chứng khoán là bắt buộc"],
+    },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
     },
     quantity: {
       type: Number,
