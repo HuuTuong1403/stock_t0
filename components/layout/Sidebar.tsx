@@ -307,7 +307,7 @@ export default function Sidebar() {
             )}
             <Button
               onClick={handleLogout}
-              className="w-full bg-slate-800 hover:bg-slate-700 text-slate-100"
+              className="w-full bg-slate-800 hover:bg-slate-700 text-slate-100 mt-4"
               variant="outline"
             >
               Đăng xuất

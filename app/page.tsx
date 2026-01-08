@@ -29,6 +29,7 @@ import {
 import Link from "next/link";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 
 interface Stats {
   counts: {
@@ -186,6 +187,18 @@ export default function DashboardPage() {
   const totalProfit =
     (stats?.t0Summary.totalProfitAfterFees || 0) +
     (stats?.longTermSummary.totalProfit || 0);
+  const totalProfitLongTermAvg =
+    stats?.longTermPortfolio.reduce(
+      (acc, stock) =>
+        acc + (stock.marketPrice - stock.averageCostBasis) * stock.quantity,
+      0
+    ) || 0;
+  const totalProfitLongTermCurrent =
+    stats?.longTermPortfolio.reduce(
+      (acc, stock) =>
+        acc + (stock.marketPrice - stock.currentCostBasis) * stock.quantity,
+      0
+    ) || 0;
 
   return (
     <div className="space-y-8">
@@ -556,7 +569,6 @@ export default function DashboardPage() {
                 </TableHeader>
                 <TableBody>
                   {stats.longTermPortfolio.map((stock) => {
-                    console.log("🚀 => stock:", stock)
                     const profitByAvg =
                       stock.marketPrice - stock.averageCostBasis;
                     const profitByCurrent =
@@ -679,6 +691,35 @@ export default function DashboardPage() {
                       </TableRow>
                     );
                   })}
+                  <TableRow className="border-slate-700 hover:bg-slate-700/30">
+                    <TableCell
+                      colSpan={5}
+                      className="text-right text-cyan-400 font-bold"
+                    >
+                      Tổng lãi/lỗ:
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right text-cyan-400 font-bold",
+                        totalProfitLongTermAvg >= 0
+                          ? "text-emerald-400"
+                          : "text-red-400"
+                      )}
+                    >
+                      {formatCurrency(totalProfitLongTermAvg)}
+                    </TableCell>
+                    <TableCell></TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right text-cyan-400 font-bold",
+                        totalProfitLongTermCurrent >= 0
+                          ? "text-emerald-400"
+                          : "text-red-400"
+                      )}
+                    >
+                      {formatCurrency(totalProfitLongTermCurrent)}
+                    </TableCell>
+                  </TableRow>
                 </TableBody>
               </Table>
             </div>
