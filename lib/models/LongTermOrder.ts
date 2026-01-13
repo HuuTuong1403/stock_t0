@@ -1,17 +1,17 @@
 import mongoose, { Document, Model, Types } from "mongoose";
+import StockUser from "./StockUser";
+import StockCompany, { IStockCompany } from "./StockCompany";
 
 export type OrderType = "BUY" | "SELL";
 
 export interface ILongTermOrder extends Document {
   tradeDate: Date;
   stockCode: string;
-  companyId: Types.ObjectId;
   userId: Types.ObjectId;
+  company: Types.ObjectId | IStockCompany; // Có thể là ObjectId hoặc populated IStockCompany
   type: OrderType;
   quantity: number;
   price: number;
-  feeRate: number;
-  taxRate: number;
   fee: number;
   tax: number;
   costBasis: number;
@@ -29,19 +29,19 @@ const LongTermOrderSchema = new mongoose.Schema(
     stockCode: {
       type: String,
       required: [true, "Mã cổ phiếu là bắt buộc"],
+      ref: "StockUser",
       uppercase: true,
       trim: true,
-    },
-    companyId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "StockCompany",
-      required: [true, "Công ty chứng khoán là bắt buộc"],
     },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
       index: true,
+    },
+    company: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "StockCompany",
     },
     type: {
       type: String,
@@ -57,14 +57,6 @@ const LongTermOrderSchema = new mongoose.Schema(
       type: Number,
       required: [true, "Giá là bắt buộc"],
       min: [0, "Giá không được âm"],
-    },
-    feeRate: {
-      type: Number,
-      default: 0,
-    },
-    taxRate: {
-      type: Number,
-      default: 0,
     },
     fee: {
       type: Number,
@@ -94,15 +86,50 @@ LongTermOrderSchema.pre("save", async function () {
   const doc = this as ILongTermOrder;
   const value = doc.quantity * doc.price;
 
+  // If company is not set, get it from stockUser
+  if (!doc.company) {
+    const stockUser = await StockUser.findOne({
+      stockCode: doc.stockCode,
+      userId: doc.userId,
+    }).populate({
+      path: "company",
+      select: "buyFeeRate sellFeeRate taxRate",
+      strictPopulate: false,
+    });
+
+    if (!stockUser || !stockUser.company) {
+      throw new Error("Không tìm thấy công ty chứng khoán");
+    }
+
+    // Set companyId from stockUser
+    const companyId =
+      typeof stockUser.company === "object"
+        ? stockUser.company._id
+        : stockUser.company;
+    doc.company = companyId as Types.ObjectId;
+  }
+
+  // Populate company if it's an ObjectId
+  let company: IStockCompany;
+  if (doc.populated("company")) {
+    company = doc.company as IStockCompany;
+  } else {
+    const companyDoc = await StockCompany.findById(doc.company);
+    if (!companyDoc) {
+      throw new Error("Không tìm thấy công ty chứng khoán");
+    }
+    company = companyDoc;
+  }
+
   if (doc.type === "BUY") {
-    doc.fee = Math.round(value * doc.feeRate);
+    doc.fee = Math.round(value * company.buyFeeRate);
     doc.tax = 0;
     doc.costBasis = value + doc.fee;
     doc.profit = 0;
   } else {
     // SELL - use sell fee rate (feeRate is set to sellFeeRate in API)
-    doc.fee = Math.round(value * doc.feeRate);
-    doc.tax = Math.round(value * doc.taxRate);
+    doc.fee = Math.round(value * company.sellFeeRate);
+    doc.tax = Math.round(value * company.taxRate);
 
     // Calculate cost basis and profit based on average cost basis of previous BUY orders
     if (
@@ -111,10 +138,12 @@ LongTermOrderSchema.pre("save", async function () {
       this.isModified("quantity") ||
       this.isModified("tradeDate")
     ) {
-      // Only take BUY orders strictly before this SELL order's trade date
+      // Only take BUY orders strictly before this SELL order's trade date, same company and same user
       const buyOrders = await mongoose.models.LongTermOrder.find({
         stockCode: doc.stockCode,
         type: "BUY",
+        company: doc.company,
+        userId: doc.userId,
         tradeDate: { $lt: doc.tradeDate },
       }).sort({ tradeDate: 1, createdAt: 1 });
 
@@ -131,7 +160,7 @@ LongTermOrderSchema.pre("save", async function () {
 
         doc.costBasis = Math.round(averageCostPerShare * doc.quantity);
         const sellValue = doc.quantity * doc.price;
-        const feeAndTaxRate = doc.feeRate + doc.taxRate;
+        const feeAndTaxRate = company.sellFeeRate + company.taxRate;
 
         const firstPart = sellValue - sellValue * feeAndTaxRate;
 

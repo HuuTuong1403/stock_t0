@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { Dividend } from "@/lib/models";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth } from "@/lib/services/auth";
 
 export async function GET(request: NextRequest) {
   try {

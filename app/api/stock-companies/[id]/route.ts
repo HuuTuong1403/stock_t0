@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { StockCompany } from "@/lib/models";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth } from "@/lib/services/auth";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -78,7 +78,12 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     return NextResponse.json(company);
   } catch (error: unknown) {
     console.error("Error updating stock company:", error);
-    if (error && typeof error === "object" && "code" in error && error.code === 11000) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === 11000
+    ) {
       return NextResponse.json(
         { error: "Tên công ty chứng khoán đã tồn tại" },
         { status: 400 }
@@ -110,7 +115,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         { status: 404 }
       );
     }
-    return NextResponse.json({ message: "Đã xóa công ty chứng khoán thành công" });
+    return NextResponse.json({
+      message: "Đã xóa công ty chứng khoán thành công",
+    });
   } catch (error) {
     console.error("Error deleting stock company:", error);
     return NextResponse.json(
@@ -119,4 +126,3 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     );
   }
 }
-

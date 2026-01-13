@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Lock, User, UserCircle, Image } from "lucide-react";
+import axiosClient from "@/lib/axiosClient";
+import { getErrorMessage } from "@/lib/utils/error";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -26,21 +28,20 @@ export default function RegisterPage() {
     // Check if registration is allowed (no users exist or user is admin)
     const checkRegistration = async () => {
       try {
-        const res = await fetch("/api/auth/me");
-        if (res.ok) {
-          const { user } = await res.json();
-
-          if (user.type === "admin") {
+        try {
+          const { data } = await axiosClient.get("/auth/me");
+          if (data?.user?.type === "admin") {
             setCanRegister(true);
             return;
           }
+        } catch {
+          // Not logged in or not admin
         }
         // If not logged in or not admin, check if any users exist
-        const checkRes = await fetch("/api/auth/check-registration");
-        if (checkRes.ok) {
-          const data = await checkRes.json();
+        try {
+          const { data } = await axiosClient.get("/auth/check-registration");
           setCanRegister(data.allowed);
-        } else {
+        } catch {
           setCanRegister(true); // Default to allow if check fails
         }
       } catch (error) {
@@ -69,29 +70,17 @@ export default function RegisterPage() {
     }
 
     try {
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: formData.username,
-          password: formData.password,
-          fullName: formData.fullName,
-          avatar: formData.avatar || undefined,
-        }),
+      await axiosClient.post("/auth/register", {
+        username: formData.username,
+        password: formData.password,
+        fullName: formData.fullName,
+        avatar: formData.avatar || undefined,
       });
-
-      if (!res.ok) {
-        const error = await res.json();
-        toast.error(error.error || "Đăng ký thất bại");
-        setLoading(false);
-        return;
-      }
-
       toast.success("Đăng ký thành công");
       router.push("/login");
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Register error:", error);
-      toast.error("Không thể đăng ký, vui lòng thử lại");
+      toast.error(getErrorMessage(error) || "Đăng ký thất bại");
     } finally {
       setLoading(false);
     }

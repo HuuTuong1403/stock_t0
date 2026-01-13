@@ -1,10 +1,12 @@
 import mongoose, { Document, Model, Types } from "mongoose";
+import StockUser from "./StockUser";
+import StockCompany, { IStockCompany } from "./StockCompany";
 
 export interface IT0Order extends Document {
   tradeDate: Date;
   stockCode: string;
-  companyId: Types.ObjectId;
   userId: Types.ObjectId;
+  company: Types.ObjectId | IStockCompany; // Có thể là ObjectId hoặc populated IStockCompany
   quantity: number;
   buyPrice: number;
   sellPrice: number;
@@ -34,10 +36,9 @@ const T0OrderSchema = new mongoose.Schema(
       uppercase: true,
       trim: true,
     },
-    companyId: {
+    company: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "StockCompany",
-      required: [true, "Công ty chứng khoán là bắt buộc"],
     },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -111,11 +112,49 @@ const T0OrderSchema = new mongoose.Schema(
 T0OrderSchema.pre("save", async function () {
   const doc = this as IT0Order;
 
+  // If company is not set, get it from stockUser
+  if (!doc.company) {
+    const stockUser = await StockUser.findOne({
+      stockCode: doc.stockCode,
+      userId: doc.userId,
+    }).populate({
+      path: "company",
+      select: "buyFeeRate sellFeeRate taxRate",
+      strictPopulate: false,
+    });
+
+    if (!stockUser || !stockUser.company) {
+      throw new Error("Không tìm thấy công ty chứng khoán");
+    }
+
+    // Set companyId from stockUser
+    const companyId =
+      typeof stockUser.company === "object"
+        ? stockUser.company._id
+        : stockUser.company;
+    doc.company = companyId as Types.ObjectId;
+  }
+
+  // Populate company if it's an ObjectId
+  let company: IStockCompany;
+  if (doc.populated("company")) {
+    company = doc.company as IStockCompany;
+  } else {
+    const companyDoc = await StockCompany.findById(doc.company);
+    if (!companyDoc) {
+      throw new Error("Không tìm thấy công ty chứng khoán");
+    }
+    company = companyDoc;
+  }
+
   doc.buyValue = doc.quantity * doc.buyPrice;
   doc.sellValue = doc.quantity * doc.sellPrice;
-  doc.buyFee = Math.round(doc.buyValue * doc.buyFeeRate);
-  doc.sellFee = Math.round(doc.sellValue * doc.sellFeeRate);
-  doc.sellTax = Math.round(doc.sellValue * doc.taxRate);
+  doc.buyFeeRate = company.buyFeeRate;
+  doc.sellFeeRate = company.sellFeeRate;
+  doc.taxRate = company.taxRate;
+  doc.buyFee = Math.round(doc.buyValue * company.buyFeeRate);
+  doc.sellFee = Math.round(doc.sellValue * company.sellFeeRate);
+  doc.sellTax = Math.round(doc.sellValue * company.taxRate);
   doc.profitBeforeFees = doc.sellValue - doc.buyValue;
   doc.profitAfterFees =
     doc.profitBeforeFees - doc.buyFee - doc.sellFee - doc.sellTax;

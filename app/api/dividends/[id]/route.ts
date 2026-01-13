@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Types } from "mongoose";
 import dbConnect from "@/lib/mongodb";
 import { Dividend } from "@/lib/models";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth } from "@/lib/services/auth";
 
 interface RouteParams {
   params: Promise<{ id: string }>;

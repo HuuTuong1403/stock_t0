@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
-import { Stock, T0Order, LongTermOrder, Dividend } from "@/lib/models";
-import { requireAuth } from "@/lib/auth";
+import { T0Order, LongTermOrder, Dividend, StockUser } from "@/lib/models";
+import { requireAuth } from "@/lib/services/auth";
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     // Get counts
     const [stockCount, t0OrderCount, longTermOrderCount, dividendCount] =
       await Promise.all([
-        Stock.countDocuments(ownerFilter),
+        StockUser.countDocuments(ownerFilter),
         T0Order.countDocuments(ownerFilter),
         LongTermOrder.countDocuments(ownerFilter),
         Dividend.countDocuments(ownerFilter),
@@ -84,12 +84,15 @@ export async function GET(request: NextRequest) {
       { $sort: { "_id.year": 1, "_id.month": 1 } },
     ]);
 
-    // Get T0 stats by stock code
+    // Get T0 stats by stock code and company
     const t0StatsByStock = await T0Order.aggregate([
       { $match: ownerFilter },
       {
         $group: {
-          _id: "$stockCode",
+          _id: {
+            stockCode: "$stockCode",
+            company: "$company",
+          },
           orderCount: { $sum: 1 },
           totalProfitBeforeFees: { $sum: "$profitBeforeFees" },
           totalProfitAfterFees: { $sum: "$profitAfterFees" },
@@ -98,18 +101,64 @@ export async function GET(request: NextRequest) {
         },
       },
       {
+        $lookup: {
+          from: "stockcompanies",
+          localField: "_id.company",
+          foreignField: "_id",
+          as: "companyInfo",
+        },
+      },
+      {
+        $unwind: {
+          path: "$companyInfo",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $lookup: {
+          from: "stocks",
+          localField: "_id.stockCode",
+          foreignField: "code",
+          as: "stockInfo",
+        },
+      },
+      {
+        $unwind: {
+          path: "$stockInfo",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $project: {
+          stockCode: "$_id.stockCode",
+          company: "$_id.company",
+          companyName: { $ifNull: ["$companyInfo.name", ""] },
+          marketPrice: { $ifNull: ["$stockInfo.marketPrice", 0] },
+          orderCount: 1,
+          totalProfitBeforeFees: 1,
+          totalProfitAfterFees: 1,
+          totalBuyValue: 1,
+          totalSellValue: 1,
+          _id: 0,
+        },
+      },
+      {
         $sort: {
+          companyName: 1,
           totalProfitAfterFees: -1,
         },
       },
     ]);
 
-    // Get long-term stats by stock code
+    // Get long-term stats by stock code and company
     const longTermStatsByStock = await LongTermOrder.aggregate([
       { $match: ownerFilter },
       {
         $group: {
-          _id: "$stockCode",
+          _id: {
+            stockCode: "$stockCode",
+            company: "$company",
+          },
           buyOrders: {
             $sum: {
               $cond: {
@@ -176,7 +225,52 @@ export async function GET(request: NextRequest) {
         },
       },
       {
+        $lookup: {
+          from: "stockcompanies",
+          localField: "_id.company",
+          foreignField: "_id",
+          as: "companyInfo",
+        },
+      },
+      {
+        $unwind: {
+          path: "$companyInfo",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $lookup: {
+          from: "stocks",
+          localField: "_id.stockCode",
+          foreignField: "code",
+          as: "stockInfo",
+        },
+      },
+      {
+        $unwind: {
+          path: "$stockInfo",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $project: {
+          stockCode: "$_id.stockCode",
+          company: "$_id.company",
+          companyName: { $ifNull: ["$companyInfo.name", ""] },
+          marketPrice: { $ifNull: ["$stockInfo.marketPrice", 0] },
+          buyOrders: 1,
+          sellOrders: 1,
+          totalBuyQuantity: 1,
+          totalSellQuantity: 1,
+          totalBuyValue: 1,
+          totalSellValue: 1,
+          totalProfit: 1,
+          _id: 0,
+        },
+      },
+      {
         $sort: {
+          companyName: 1,
           totalProfit: -1,
         },
       },
@@ -217,12 +311,49 @@ export async function GET(request: NextRequest) {
       },
     ]);
 
-    // Get long-term portfolio (current holdings with market price)
+    // Get long-term portfolio (current holdings with market price) - group by stockCode and company
     const longTermPortfolio = await LongTermOrder.aggregate([
       { $match: ownerFilter },
+      // First lookup to get current company from StockUser
+      {
+        $lookup: {
+          from: "stockusers",
+          let: { stockCode: "$stockCode", userId: ownerFilter.userId },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$stockCode", "$$stockCode"] },
+                    { $eq: ["$userId", "$$userId"] },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "stockUserInfo",
+        },
+      },
+      {
+        $unwind: {
+          path: "$stockUserInfo",
+          preserveNullAndEmptyArrays: false, // Only keep orders that have stockUser
+        },
+      },
+      // Filter to only keep orders with matching company
+      {
+        $match: {
+          $expr: {
+            $eq: ["$company", "$stockUserInfo.company"],
+          },
+        },
+      },
       {
         $group: {
-          _id: "$stockCode",
+          _id: {
+            stockCode: "$stockCode",
+            company: "$company",
+          },
           totalQuantity: {
             $sum: {
               $cond: {
@@ -259,6 +390,7 @@ export async function GET(request: NextRequest) {
               },
             },
           },
+          stockUserCostPrice: { $first: "$stockUserInfo.costPrice" },
         },
       },
       {
@@ -269,7 +401,7 @@ export async function GET(request: NextRequest) {
       {
         $lookup: {
           from: "stocks",
-          localField: "_id",
+          localField: "_id.stockCode",
           foreignField: "code",
           as: "stockInfo",
         },
@@ -281,8 +413,24 @@ export async function GET(request: NextRequest) {
         },
       },
       {
+        $lookup: {
+          from: "stockcompanies",
+          localField: "_id.company",
+          foreignField: "_id",
+          as: "companyInfo",
+        },
+      },
+      {
+        $unwind: {
+          path: "$companyInfo",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
         $project: {
-          stockCode: "$_id",
+          stockCode: "$_id.stockCode",
+          company: "$_id.company",
+          companyName: { $ifNull: ["$companyInfo.name", ""] },
           quantity: "$totalQuantity",
           quantitySell: "$totalQuantitySell",
           averageCostBasis: {
@@ -293,7 +441,7 @@ export async function GET(request: NextRequest) {
             },
           },
           marketPrice: { $ifNull: ["$stockInfo.marketPrice", 0] },
-          currentCostBasis: { $ifNull: ["$stockInfo.currentCostBasis", 0] },
+          currentCostBasis: { $ifNull: ["$stockUserCostPrice", 0] },
           _id: 0,
         },
       },
@@ -304,6 +452,7 @@ export async function GET(request: NextRequest) {
       },
       {
         $sort: {
+          companyName: 1,
           stockCode: 1,
         },
       },

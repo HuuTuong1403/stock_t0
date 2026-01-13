@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { User } from "@/lib/models";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth } from "@/lib/services/auth";
 
 export async function POST(request: NextRequest) {
   try {
@@ -63,4 +63,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Lỗi tạo tài khoản" }, { status: 500 });
   }
 }
-

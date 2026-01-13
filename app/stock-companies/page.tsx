@@ -31,6 +31,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2, Landmark, Star } from "lucide-react";
 import { toast } from "sonner";
+import axiosClient from "@/lib/axiosClient";
+import { getErrorMessage } from "@/lib/utils/error";
 import { formatPercent } from "@/lib/format";
 
 interface StockCompany {
@@ -64,12 +66,11 @@ export default function StockCompaniesPage() {
 
   const fetchCompanies = async () => {
     try {
-      const res = await fetch("/api/stock-companies");
-      const data = await res.json();
+      const { data } = await axiosClient.get("/stock-companies");
       setCompanies(data);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error fetching companies:", error);
-      toast.error("Lỗi khi tải danh sách công ty chứng khoán");
+      toast.error(getErrorMessage(error) || "Lỗi khi tải danh sách công ty chứng khoán");
     } finally {
       setLoading(false);
     }
@@ -78,37 +79,28 @@ export default function StockCompaniesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const url = editingCompany
-        ? `/api/stock-companies/${editingCompany._id}`
-        : "/api/stock-companies";
-      const method = editingCompany ? "PUT" : "POST";
+      const payload = {
+        name: formData.name,
+        buyFeeRate: parseFloat(formData.buyFeeRate) / 100,
+        sellFeeRate: parseFloat(formData.sellFeeRate) / 100,
+        taxRate: parseFloat(formData.taxRate) / 100,
+        isDefault: formData.isDefault,
+      };
 
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: formData.name,
-          buyFeeRate: parseFloat(formData.buyFeeRate) / 100,
-          sellFeeRate: parseFloat(formData.sellFeeRate) / 100,
-          taxRate: parseFloat(formData.taxRate) / 100,
-          isDefault: formData.isDefault,
-        }),
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error);
+      if (editingCompany) {
+        await axiosClient.put(`/stock-companies/${editingCompany._id}`, payload);
+        toast.success("Cập nhật thành công");
+      } else {
+        await axiosClient.post("/stock-companies", payload);
+        toast.success("Thêm công ty thành công");
       }
 
-      toast.success(
-        editingCompany ? "Cập nhật thành công" : "Thêm công ty thành công"
-      );
       setIsDialogOpen(false);
       setEditingCompany(null);
       resetForm();
       fetchCompanies();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Có lỗi xảy ra");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error) || "Có lỗi xảy ra");
     }
   };
 
@@ -128,29 +120,23 @@ export default function StockCompaniesPage() {
     if (!confirm("Bạn có chắc muốn xóa công ty chứng khoán này?")) return;
 
     try {
-      const res = await fetch(`/api/stock-companies/${id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("Lỗi khi xóa");
+      await axiosClient.delete(`/stock-companies/${id}`);
       toast.success("Xóa công ty chứng khoán thành công");
       fetchCompanies();
-    } catch {
-      toast.error("Lỗi khi xóa công ty chứng khoán");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error) || "Lỗi khi xóa công ty chứng khoán");
     }
   };
 
   const handleSetDefault = async (company: StockCompany) => {
     try {
-      const res = await fetch(`/api/stock-companies/${company._id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isDefault: true }),
+      await axiosClient.put(`/stock-companies/${company._id}`, {
+        isDefault: true,
       });
-      if (!res.ok) throw new Error("Lỗi khi cập nhật");
       toast.success(`Đã đặt ${company.name} làm mặc định`);
       fetchCompanies();
-    } catch {
-      toast.error("Lỗi khi cập nhật");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error) || "Lỗi khi cập nhật");
     }
   };
 

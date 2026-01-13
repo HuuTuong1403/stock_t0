@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+
 import dbConnect from "@/lib/mongodb";
 import { Stock } from "@/lib/models";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth } from "@/lib/services/auth";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -17,16 +18,25 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const { user } = auth;
+    if (user.type !== "admin") {
+      return NextResponse.json(
+        { error: "Bạn không có quyền truy cập" },
+        { status: 403 }
+      );
+    }
+
     const stock = await Stock.findOne({
-      _id: id,
-      userId: auth.user._id,
+      code: id,
     });
+
     if (!stock) {
       return NextResponse.json(
         { error: "Không tìm thấy cổ phiếu" },
         { status: 404 }
       );
     }
+
     return NextResponse.json(stock);
   } catch (error) {
     console.error("Error fetching stock:", error);
@@ -47,10 +57,17 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { user } = auth;
+
+    if (user.type !== "admin") {
+      return NextResponse.json(
+        { error: "Bạn không có quyền truy cập" },
+        { status: 403 }
+      );
+    }
+
     const stock = await Stock.findOneAndUpdate(
       {
-        _id: id,
-        userId: user._id,
+        code: id,
       },
       body,
       {
@@ -58,12 +75,14 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         runValidators: true,
       }
     );
+
     if (!stock) {
       return NextResponse.json(
         { error: "Không tìm thấy cổ phiếu" },
         { status: 404 }
       );
     }
+
     return NextResponse.json(stock);
   } catch (error: unknown) {
     console.error("Error updating stock:", error);
@@ -89,15 +108,24 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
     await dbConnect();
     const { id } = await params;
+
     const auth = await requireAuth(request);
     if (!auth) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { user } = auth;
+
+    if (user.type !== "admin") {
+      return NextResponse.json(
+        { error: "Bạn không có quyền truy cập" },
+        { status: 403 }
+      );
+    }
+
     const stock = await Stock.findOneAndDelete({
-      _id: id,
-      userId: user._id,
+      code: id,
     });
+
     if (!stock) {
       return NextResponse.json(
         { error: "Không tìm thấy cổ phiếu" },

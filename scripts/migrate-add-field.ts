@@ -14,7 +14,14 @@ if (!MONGODB_URI) {
 
 // ==== IMPORT MODEL ====
 // Import model bạn muốn migrate (bỏ comment khi cần dùng)
-import { Dividend, LongTermOrder, Stock, StockCompany, T0Order } from "../lib/models";
+import {
+  Dividend,
+  LongTermOrder,
+  Stock,
+  StockCompany,
+  T0Order,
+  User,
+} from "../lib/models";
 // import { Stock, T0Order, LongTermOrder } from "../lib/models";
 
 async function main() {
@@ -99,11 +106,12 @@ async function main() {
   // ============================================
 
   // Ví dụ: Thêm field userId cho documents chưa có
-  const res = await Stock.updateMany(
-    { userId: { $exists: false } }, // Lọc documents chưa có userId
+  const res = await User.updateMany(
+    { investorToken: { $exists: false } }, // Lọc documents chưa có userId
     {
       $set: {
-        userId: new mongoose.Types.ObjectId("695f53e81519040e786ef531"), // ObjectId hợp lệ
+        investorToken: "",
+        investorId: "",
       },
     }
   );

@@ -48,6 +48,9 @@ import {
 import { toast } from "sonner";
 import { formatDate, formatDateInput, formatPercent } from "@/lib/format";
 import { ImportExportDialog } from "@/components/ImportExportDialog";
+import axiosClient from "@/lib/axiosClient";
+import { getErrorMessage } from "@/lib/utils/error";
+import { StockSelector } from "@/components/StockSelector";
 
 interface Dividend {
   _id: string;
@@ -88,16 +91,15 @@ export default function DividendsPage() {
 
   const fetchDividends = useCallback(async () => {
     try {
-      const params = new URLSearchParams();
-      if (filterStock) params.append("stockCode", filterStock);
-      if (filterType) params.append("type", filterType);
+      const params: Record<string, string> = {};
+      if (filterStock) params.stockCode = filterStock;
+      if (filterType) params.type = filterType;
 
-      const res = await fetch(`/api/dividends?${params.toString()}`);
-      const data = await res.json();
+      const { data } = await axiosClient.get("/dividends", { params });
       setDividends(data);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error fetching dividends:", error);
-      toast.error("Lỗi khi tải danh sách cổ tức");
+      toast.error(getErrorMessage(error) || "Lỗi khi tải danh sách cổ tức");
     } finally {
       setLoading(false);
     }
@@ -110,45 +112,36 @@ export default function DividendsPage() {
 
   const fetchStocks = async () => {
     try {
-      const res = await fetch("/api/stocks");
-      const data = await res.json();
+      const { data } = await axiosClient.get("/stocks");
       setStocks(data);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error fetching stocks:", error);
+      toast.error(getErrorMessage(error) || "Lỗi khi tải danh sách cổ phiếu");
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const url = editingDividend
-        ? `/api/dividends/${editingDividend._id}`
-        : "/api/dividends";
-      const method = editingDividend ? "PUT" : "POST";
+      const payload = {
+        ...formData,
+        value: parseFloat(formData.value),
+      };
 
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
-          value: parseFloat(formData.value),
-        }),
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error);
+      if (editingDividend) {
+        await axiosClient.put(`/dividends/${editingDividend._id}`, payload);
+        toast.success("Cập nhật thành công");
+      } else {
+        await axiosClient.post("/dividends", payload);
+        toast.success("Thêm cổ tức thành công");
       }
 
-      toast.success(
-        editingDividend ? "Cập nhật thành công" : "Thêm cổ tức thành công"
-      );
       setIsDialogOpen(false);
       setEditingDividend(null);
       resetForm();
       fetchDividends();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Có lỗi xảy ra");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error) || "Có lỗi xảy ra");
     }
   };
 
@@ -168,12 +161,11 @@ export default function DividendsPage() {
     if (!confirm("Bạn có chắc muốn xóa cổ tức này?")) return;
 
     try {
-      const res = await fetch(`/api/dividends/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Lỗi khi xóa");
+      await axiosClient.delete(`/dividends/${id}`);
       toast.success("Xóa cổ tức thành công");
       fetchDividends();
-    } catch {
-      toast.error("Lỗi khi xóa cổ tức");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error) || "Lỗi khi xóa cổ tức");
     }
   };
 
@@ -219,22 +211,14 @@ export default function DividendsPage() {
 
     setAdjusting(dividend._id);
     try {
-      const res = await fetch("/api/dividends/adjust-orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dividendId: dividend._id }),
+      const { data } = await axiosClient.post("/dividends/adjust-orders", {
+        dividendId: dividend._id,
       });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error);
-      }
-
-      const result = await res.json();
-      toast.success(result.message);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Có lỗi xảy ra");
+      toast.success(data.message || "Điều chỉnh lệnh thành công");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error) || "Có lỗi xảy ra");
     } finally {
+      fetchDividends();
       setAdjusting(null);
     }
   };
@@ -334,27 +318,16 @@ export default function DividendsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label className="text-slate-300">Mã cổ phiếu</Label>
-                    <Select
+                    <StockSelector
                       value={formData.stockCode}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, stockCode: value })
+                      onSelect={(stock) =>
+                        setFormData({
+                          ...formData,
+                          stockCode: stock?.code || "",
+                        })
                       }
-                    >
-                      <SelectTrigger className="bg-slate-800 border-slate-600 text-white">
-                        <SelectValue placeholder="Chọn mã CP" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-slate-800 border-slate-700">
-                        {stocks.map((stock) => (
-                          <SelectItem
-                            key={stock._id}
-                            value={stock.code}
-                            className="text-white hover:bg-slate-700"
-                          >
-                            {stock.code} - {stock.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder="Chọn cổ phiếu..."
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-slate-300">
@@ -406,27 +379,13 @@ export default function DividendsPage() {
         <Card className="bg-slate-800/50 border-slate-700/50">
           <CardContent className="pt-6">
             <div className="flex flex-wrap gap-4 items-end">
-              <div className="space-y-2">
+              <div className="space-y-2 min-w-[500px] w-auto">
                 <Label className="text-slate-300">Mã cổ phiếu</Label>
-                <Select value={filterStock} onValueChange={setFilterStock}>
-                  <SelectTrigger className="w-[150px] bg-slate-900/50 border-slate-600 text-white">
-                    <SelectValue placeholder="Tất cả" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-slate-700">
-                    <SelectItem value="all" className="text-white">
-                      Tất cả
-                    </SelectItem>
-                    {stocks.map((stock) => (
-                      <SelectItem
-                        key={stock._id}
-                        value={stock.code}
-                        className="text-white hover:bg-slate-700"
-                      >
-                        {stock.code}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <StockSelector
+                  value={filterStock}
+                  onSelect={(stock) => setFilterStock(stock?.code || "")}
+                  placeholder="Chọn cổ phiếu..."
+                />
               </div>
               <div className="space-y-2">
                 <Label className="text-slate-300">Loại</Label>

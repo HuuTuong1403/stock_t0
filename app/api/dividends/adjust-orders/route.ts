@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { Dividend, LongTermOrder } from "@/lib/models";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth } from "@/lib/services/auth";
 
 /**
  * Adjust stock orders based on dividend split
@@ -123,6 +123,8 @@ export async function POST(request: NextRequest) {
         await order.save();
         adjustedCount++;
       }
+
+      await Dividend.findByIdAndUpdate(dividendId, { isUsed: true });
     }
 
     return NextResponse.json({

@@ -40,12 +40,14 @@ import { Plus, Pencil, Trash2, TrendingUp, Filter, X } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency, formatDate, formatDateInput } from "@/lib/format";
 import { ImportExportDialog } from "@/components/ImportExportDialog";
+import axiosClient from "@/lib/axiosClient";
+import { getErrorMessage } from "@/lib/utils/error";
 
 interface LongTermOrder {
   _id: string;
   tradeDate: string;
   stockCode: string;
-  companyId: { _id: string; name: string } | string;
+  company: StockCompany;
   type: "BUY" | "SELL";
   quantity: number;
   price: number;
@@ -56,10 +58,13 @@ interface LongTermOrder {
   createdAt?: string;
 }
 
-interface Stock {
+interface StockUser {
   _id: string;
-  code: string;
-  name: string;
+  stockCode: string;
+  costPrice: number;
+  company: StockCompany | string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface StockCompany {
@@ -73,8 +78,7 @@ interface StockCompany {
 
 export default function LongTermOrdersPage() {
   const [orders, setOrders] = useState<LongTermOrder[]>([]);
-  const [stocks, setStocks] = useState<Stock[]>([]);
-  const [companies, setCompanies] = useState<StockCompany[]>([]);
+  const [stockUsers, setStockUsers] = useState<StockUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<LongTermOrder | null>(null);
@@ -90,7 +94,6 @@ export default function LongTermOrdersPage() {
   const [formData, setFormData] = useState({
     tradeDate: formatDateInput(new Date()),
     stockCode: "",
-    companyId: "",
     type: "BUY" as "BUY" | "SELL",
     quantity: "",
     price: "",
@@ -100,18 +103,20 @@ export default function LongTermOrdersPage() {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const params = new URLSearchParams();
-      if (filterStock) params.append("stockCode", filterStock);
-      if (filterType) params.append("type", filterType);
-      if (filterStartDate) params.append("startDate", filterStartDate);
-      if (filterEndDate) params.append("endDate", filterEndDate);
+      const params: Record<string, string> = {};
+      const [stockCode, companyId] = filterStock.split("|");
 
-      const res = await fetch(`/api/long-term-orders?${params.toString()}`);
-      const data = await res.json();
+      if (stockCode) params.stockCode = stockCode;
+      if (companyId) params.companyId = companyId;
+      if (filterType) params.type = filterType;
+      if (filterStartDate) params.startDate = filterStartDate;
+      if (filterEndDate) params.endDate = filterEndDate;
+
+      const { data } = await axiosClient.get("/long-term-orders", { params });
       setOrders(data);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error fetching orders:", error);
-      toast.error("Lỗi khi tải danh sách lệnh");
+      toast.error(getErrorMessage(error) || "Lỗi khi tải danh sách lệnh");
     } finally {
       setLoading(false);
     }
@@ -119,56 +124,33 @@ export default function LongTermOrdersPage() {
 
   useEffect(() => {
     fetchOrders();
-    fetchStocks();
-    fetchCompanies();
+    fetchStockUsers();
   }, [fetchOrders]);
 
-  const fetchStocks = async () => {
+  const fetchStockUsers = async () => {
     try {
-      const res = await fetch("/api/stocks");
-      const data = await res.json();
-      setStocks(data);
-    } catch (error) {
-      console.error("Error fetching stocks:", error);
-    }
-  };
-
-  const fetchCompanies = async () => {
-    try {
-      const res = await fetch("/api/stock-companies");
-      const data = await res.json();
-      setCompanies(data);
-      // Set default company if available
-      const defaultCompany = data.find((c: StockCompany) => c.isDefault);
-      if (defaultCompany) {
-        setFormData((prev) => ({ ...prev, companyId: defaultCompany._id }));
-      }
-    } catch (error) {
-      console.error("Error fetching companies:", error);
+      const { data } = await axiosClient.get("/stock-users");
+      setStockUsers(data);
+    } catch (error: unknown) {
+      console.error("Error fetching stock users:", error);
+      toast.error(
+        getErrorMessage(error) || "Lỗi khi tải danh sách cổ phiếu người dùng"
+      );
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.companyId) {
-      toast.error("Vui lòng chọn công ty chứng khoán");
-      return;
-    }
-
     try {
-      const url = editingOrder
-        ? `/api/long-term-orders/${editingOrder._id}`
-        : "/api/long-term-orders";
-      const method = editingOrder ? "PUT" : "POST";
-
+      const [stockCode, company] = formData.stockCode.split("|");
       const payload: Record<string, unknown> = {
         tradeDate: formData.tradeDate,
-        stockCode: formData.stockCode,
-        companyId: formData.companyId,
+        stockCode,
         type: formData.type,
         quantity: parseInt(formData.quantity),
         price: parseFloat(formData.price),
+        company,
       };
 
       // Only include costBasis and profit for SELL orders
@@ -177,39 +159,29 @@ export default function LongTermOrdersPage() {
         payload.profit = parseFloat(formData.profit) || 0;
       }
 
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error);
+      if (editingOrder) {
+        await axiosClient.put(`/long-term-orders/${editingOrder._id}`, payload);
+        toast.success("Cập nhật thành công");
+      } else {
+        await axiosClient.post("/long-term-orders", payload);
+        toast.success("Thêm lệnh thành công");
       }
 
-      toast.success(
-        editingOrder ? "Cập nhật thành công" : "Thêm lệnh thành công"
-      );
       setIsDialogOpen(false);
       setEditingOrder(null);
       resetForm();
       fetchOrders();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Có lỗi xảy ra");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error) || "Có lỗi xảy ra");
     }
   };
 
   const handleEdit = (order: LongTermOrder) => {
     setEditingOrder(order);
-    const companyId =
-      typeof order.companyId === "object"
-        ? order.companyId._id
-        : order.companyId;
+
     setFormData({
       tradeDate: formatDateInput(order.tradeDate),
-      stockCode: order.stockCode,
-      companyId: companyId,
+      stockCode: order.stockCode + "|" + (order.company as StockCompany)?._id,
       type: order.type,
       quantity: order.quantity.toString(),
       price: order.price.toString(),
@@ -223,23 +195,18 @@ export default function LongTermOrdersPage() {
     if (!confirm("Bạn có chắc muốn xóa lệnh này?")) return;
 
     try {
-      const res = await fetch(`/api/long-term-orders/${id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("Lỗi khi xóa");
+      await axiosClient.delete(`/long-term-orders/${id}`);
       toast.success("Xóa lệnh thành công");
       fetchOrders();
-    } catch {
-      toast.error("Lỗi khi xóa lệnh");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error) || "Lỗi khi xóa lệnh");
     }
   };
 
   const resetForm = () => {
-    const defaultCompany = companies.find((c) => c.isDefault);
     setFormData({
       tradeDate: formatDateInput(new Date()),
       stockCode: "",
-      companyId: defaultCompany?._id || "",
       type: "BUY",
       quantity: "",
       price: "",
@@ -276,19 +243,12 @@ export default function LongTermOrdersPage() {
     totalProfit: sellOrders.reduce((acc, o) => acc + o.profit, 0),
   };
 
-  const getCompanyName = (order: LongTermOrder) => {
-    if (typeof order.companyId === "object" && order.companyId?.name) {
-      return order.companyId.name;
-    }
-    return "-";
-  };
-
   // Calculate remaining quantity for each order
   const calculateRemainingQuantity = (order: LongTermOrder) => {
     // Get all orders of the same stockCode up to and including current order
     // Sort by tradeDate first, then by createdAt for same date, then by _id
     const sameStockOrders = orders
-      .filter((o) => o.stockCode === order.stockCode)
+    .filter((o) => o.stockCode === order.stockCode && o.company._id === order.company._id)
       .sort((a, b) => {
         const dateA = new Date(a.tradeDate).getTime();
         const dateB = new Date(b.tradeDate).getTime();
@@ -433,37 +393,18 @@ export default function LongTermOrdersPage() {
                           <SelectValue placeholder="Chọn mã CP" />
                         </SelectTrigger>
                         <SelectContent className="bg-slate-800 border-slate-700">
-                          {stocks.map((stock) => (
+                          {stockUsers.map((stockUser) => (
                             <SelectItem
-                              key={stock._id}
-                              value={stock.code}
+                              key={stockUser._id}
+                              value={
+                                stockUser.stockCode +
+                                "|" +
+                                (stockUser.company as StockCompany)?._id
+                              }
                               className="text-white hover:bg-slate-700"
                             >
-                              {stock.code}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-slate-300">CTCK</Label>
-                      <Select
-                        value={formData.companyId}
-                        onValueChange={(value) =>
-                          setFormData({ ...formData, companyId: value })
-                        }
-                      >
-                        <SelectTrigger className="bg-slate-800 border-slate-600 text-white">
-                          <SelectValue placeholder="Chọn CTCK" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-slate-800 border-slate-700">
-                          {companies.map((company) => (
-                            <SelectItem
-                              key={company._id}
-                              value={company._id}
-                              className="text-white hover:bg-slate-700"
-                            >
-                              {company.name}
+                              {stockUser.stockCode} (
+                              {(stockUser.company as StockCompany)?.name})
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -499,39 +440,8 @@ export default function LongTermOrdersPage() {
                       />
                     </div>
                   </div>
-                  {formData.type === "SELL" && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label className="text-slate-300">Giá vốn</Label>
-                        <Input
-                          type="number"
-                          placeholder="Giá vốn trung bình"
-                          value={formData.costBasis}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              costBasis: e.target.value,
-                            })
-                          }
-                          className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500"
-                          min="0"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-slate-300">Lợi nhuận</Label>
-                        <Input
-                          type="number"
-                          placeholder="Lợi nhuận thực tế"
-                          value={formData.profit}
-                          onChange={(e) =>
-                            setFormData({ ...formData, profit: e.target.value })
-                          }
-                          className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500"
-                        />
-                      </div>
-                    </div>
-                  )}
                 </div>
+
                 <DialogFooter>
                   <Button
                     type="button"
@@ -569,13 +479,18 @@ export default function LongTermOrdersPage() {
                     <SelectItem value="all" className="text-white">
                       Tất cả
                     </SelectItem>
-                    {stocks.map((stock) => (
+                    {stockUsers.map((stockUser) => (
                       <SelectItem
-                        key={stock._id}
-                        value={stock.code}
+                        key={stockUser._id}
+                        value={
+                          stockUser.stockCode +
+                          "|" +
+                          (stockUser.company as StockCompany)?._id
+                        }
                         className="text-white hover:bg-slate-700"
                       >
-                        {stock.code}
+                        {stockUser.stockCode} (
+                        {(stockUser.company as StockCompany)?.name})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -764,7 +679,7 @@ export default function LongTermOrdersPage() {
                             </span>
                           </TableCell>
                           <TableCell className="text-slate-400 text-sm">
-                            {getCompanyName(order)}
+                            {(order.company as StockCompany)?.name}
                           </TableCell>
                           <TableCell>
                             <Badge

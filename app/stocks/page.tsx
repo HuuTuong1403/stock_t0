@@ -1,9 +1,21 @@
 "use client";
 
+import { toast } from "sonner";
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
+import { Plus, Pencil, Trash2, Building2, Search } from "lucide-react";
+
+import { formatCurrency } from "@/lib/format";
+import {
+  deleteStock,
+  editOrCreateStock,
+  getStocks,
+} from "@/lib/services/stock";
+import { Pagination } from "@/components/ui/pagination";
+
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { ImportExportDialog } from "@/components/ImportExportDialog";
 import {
   Table,
   TableBody,
@@ -28,87 +40,88 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Plus, Pencil, Trash2, Building2, Search } from "lucide-react";
-import { toast } from "sonner";
-import { formatCurrency } from "@/lib/format";
-import { ImportExportDialog } from "@/components/ImportExportDialog";
 
 interface Stock {
-  _id: string;
   code: string;
   name: string;
-  marketPrice: number;
-  currentCostBasis: number;
+  industry: string;
+  marketPrice?: number;
   createdAt: string;
+}
+
+interface PaginationData {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
 }
 
 export default function StocksPage() {
   const [stocks, setStocks] = useState<Stock[]>([]);
-  const [filteredStocks, setFilteredStocks] = useState<Stock[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingStock, setEditingStock] = useState<Stock | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState<PaginationData>({
+    page: 1,
+    limit: 50,
+    total: 0,
+    totalPages: 0,
+  });
   const [formData, setFormData] = useState({
     code: "",
     name: "",
-    marketPrice: "",
-    currentCostBasis: "",
+    industry: "",
   });
 
+  // Debounce search term
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+      setCurrentPage(1); // Reset to first page when search changes
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  // Fetch stocks when page or search changes
+  useEffect(() => {
+    const fetchStocks = async () => {
+      try {
+        setLoading(true);
+        const res = await getStocks({
+          page: currentPage,
+          limit: 50,
+          search: debouncedSearchTerm,
+        });
+
+        if (res && typeof res === "object" && "data" in res) {
+          setStocks(res.data as Stock[]);
+          if ("pagination" in res) {
+            setPagination(res.pagination as PaginationData);
+          }
+        } else {
+          setStocks([]);
+        }
+      } catch (error) {
+        console.error("Error fetching stocks:", error);
+        toast.error("Lỗi khi tải danh sách cổ phiếu");
+        setStocks([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchStocks();
-  }, []);
-
-  useEffect(() => {
-    const filtered = stocks.filter(
-      (stock) =>
-        stock.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        stock.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    setFilteredStocks(filtered);
-  }, [stocks, searchTerm]);
-
-  const fetchStocks = async () => {
-    try {
-      const res = await fetch("/api/stocks");
-      const data = await res.json();
-      setStocks(data);
-    } catch (error) {
-      console.error("Error fetching stocks:", error);
-      toast.error("Lỗi khi tải danh sách cổ phiếu");
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [currentPage, debouncedSearchTerm]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     try {
-      const url = editingStock
-        ? `/api/stocks/${editingStock._id}`
-        : "/api/stocks";
-      const method = editingStock ? "PUT" : "POST";
-
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          code: formData.code,
-          name: formData.name,
-          marketPrice: formData.marketPrice
-            ? parseFloat(formData.marketPrice)
-            : 0,
-          currentCostBasis: formData.currentCostBasis
-            ? parseFloat(formData.currentCostBasis)
-            : 0,
-        }),
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error);
-      }
+      await editOrCreateStock(formData, editingStock ? "PUT" : "POST");
 
       toast.success(
         editingStock ? "Cập nhật thành công" : "Thêm cổ phiếu thành công"
@@ -116,7 +129,8 @@ export default function StocksPage() {
       setIsDialogOpen(false);
       setEditingStock(null);
       resetForm();
-      fetchStocks();
+      // Trigger refetch by resetting to page 1
+      setCurrentPage(1);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Có lỗi xảy ra");
     }
@@ -127,24 +141,24 @@ export default function StocksPage() {
     setFormData({
       code: stock.code,
       name: stock.name,
-      marketPrice: stock.marketPrice?.toString() || "",
-      currentCostBasis: stock.currentCostBasis?.toString() || "",
+      industry: stock.industry,
     });
     setIsDialogOpen(true);
   };
 
   const resetForm = () => {
-    setFormData({ code: "", name: "", marketPrice: "", currentCostBasis: "" });
+    setFormData({ code: "", name: "", industry: "" });
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (code: string) => {
     if (!confirm("Bạn có chắc muốn xóa cổ phiếu này?")) return;
 
     try {
-      const res = await fetch(`/api/stocks/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Lỗi khi xóa");
+      await deleteStock(code);
+
       toast.success("Xóa cổ phiếu thành công");
-      fetchStocks();
+      // Refetch current page
+      setCurrentPage(1);
     } catch {
       toast.error("Lỗi khi xóa cổ phiếu");
     }
@@ -172,7 +186,13 @@ export default function StocksPage() {
           </div>
 
           <div className="flex gap-2">
-            <ImportExportDialog type="stocks" onSuccess={fetchStocks} />
+            <ImportExportDialog
+              type="stocks"
+              onSuccess={() => {
+                // Trigger refetch by resetting page
+                setCurrentPage(1);
+              }}
+            />
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button
@@ -230,46 +250,21 @@ export default function StocksPage() {
                         required
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="marketPrice" className="text-slate-300">
-                          Giá thị trường
-                        </Label>
-                        <Input
-                          id="marketPrice"
-                          type="number"
-                          placeholder="VD: 25000"
-                          value={formData.marketPrice}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              marketPrice: e.target.value,
-                            })
-                          }
-                          className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label
-                          htmlFor="currentCostBasis"
-                          className="text-slate-300"
-                        >
-                          Giá vốn hiện tại
-                        </Label>
-                        <Input
-                          id="currentCostBasis"
-                          type="number"
-                          placeholder="Tự động tính từ lệnh dài hạn"
-                          value={formData.currentCostBasis}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              currentCostBasis: e.target.value,
-                            })
-                          }
-                          className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500"
-                        />
-                      </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="name" className="text-slate-300">
+                        Ngành hàng
+                      </Label>
+                      <Input
+                        id="industry"
+                        placeholder="VD: Công nghiệp, Ngân hàng, Bảo hiểm..."
+                        value={formData.industry}
+                        onChange={(e) =>
+                          setFormData({ ...formData, industry: e.target.value })
+                        }
+                        className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500"
+                        required
+                      />
                     </div>
                   </div>
                   <DialogFooter>
@@ -314,7 +309,8 @@ export default function StocksPage() {
           <CardHeader>
             <CardTitle className="text-white">Danh sách cổ phiếu</CardTitle>
             <CardDescription className="text-slate-400">
-              Tổng cộng {filteredStocks.length} cổ phiếu
+              Tổng cộng {pagination.total} cổ phiếu
+              {debouncedSearchTerm && ` (tìm kiếm: "${debouncedSearchTerm}")`}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -336,11 +332,11 @@ export default function StocksPage() {
                       <TableHead className="text-slate-300 font-semibold">
                         Tên doanh nghiệp
                       </TableHead>
-                      <TableHead className="text-slate-300 font-semibold text-right">
-                        Giá TT
+                      <TableHead className="text-slate-300 font-semibold">
+                        Ngành hàng
                       </TableHead>
                       <TableHead className="text-slate-300 font-semibold text-right">
-                        Giá HT
+                        Giá thị trướng
                       </TableHead>
                       <TableHead className="text-slate-300 font-semibold text-right">
                         Thao tác
@@ -348,26 +344,26 @@ export default function StocksPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredStocks.length === 0 ? (
+                    {stocks.length === 0 ? (
                       <TableRow>
                         <TableCell
-                          colSpan={7}
+                          colSpan={6}
                           className="text-center text-slate-500 py-8"
                         >
-                          {searchTerm
+                          {debouncedSearchTerm
                             ? "Không tìm thấy cổ phiếu"
                             : "Chưa có cổ phiếu nào"}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredStocks.map((stock, index) => {
+                      stocks.map((stock, index) => {
                         return (
                           <TableRow
-                            key={stock._id}
+                            key={stock.code}
                             className="border-slate-700 hover:bg-slate-700/30"
                           >
                             <TableCell className="text-slate-400">
-                              {index + 1}
+                              {(currentPage - 1) * 50 + index + 1}
                             </TableCell>
                             <TableCell>
                               <span className="font-mono font-semibold text-emerald-400">
@@ -377,15 +373,12 @@ export default function StocksPage() {
                             <TableCell className="text-slate-200">
                               {stock.name}
                             </TableCell>
+                            <TableCell className="text-slate-200">
+                              {stock.industry}
+                            </TableCell>
                             <TableCell className="text-right text-slate-200">
                               {stock.marketPrice && stock.marketPrice > 0
                                 ? formatCurrency(stock.marketPrice)
-                                : "-"}
-                            </TableCell>
-                            <TableCell className="text-right text-slate-200">
-                              {stock.currentCostBasis &&
-                              stock.currentCostBasis > 0
-                                ? formatCurrency(stock.currentCostBasis)
                                 : "-"}
                             </TableCell>
                             <TableCell className="text-right">
@@ -401,7 +394,7 @@ export default function StocksPage() {
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  onClick={() => handleDelete(stock._id)}
+                                  onClick={() => handleDelete(stock.code)}
                                   className="h-8 w-8 text-slate-400 hover:text-red-400 hover:bg-red-500/10"
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -414,6 +407,15 @@ export default function StocksPage() {
                     )}
                   </TableBody>
                 </Table>
+              </div>
+            )}
+            {!loading && pagination.totalPages > 1 && (
+              <div className="mt-4">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={pagination.totalPages}
+                  onPageChange={setCurrentPage}
+                />
               </div>
             )}
           </CardContent>

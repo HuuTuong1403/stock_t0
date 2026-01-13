@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { LongTermOrder, StockCompany } from "@/lib/models";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth } from "@/lib/services/auth";
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get("type");
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
+    const companyId = searchParams.get("companyId");
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const filter: any = { userId: user._id };
@@ -24,6 +25,10 @@ export async function GET(request: NextRequest) {
     if (stockCode) {
       filter.stockCode =
         stockCode === "all" ? { $exists: true } : stockCode.toUpperCase();
+    }
+
+    if (companyId) {
+      filter.company = companyId;
     }
 
     if (type && (type === "BUY" || type === "SELL")) {
@@ -41,7 +46,11 @@ export async function GET(request: NextRequest) {
     }
 
     const orders = await LongTermOrder.find(filter)
-      .populate({ path: "companyId", select: "name", strictPopulate: false })
+      .populate({
+        path: "company",
+        select: "name buyFeeRate sellFeeRate taxRate",
+        strictPopulate: false,
+      })
       .sort({ tradeDate: -1 });
     return NextResponse.json(orders);
   } catch (error) {
@@ -63,24 +72,8 @@ export async function POST(request: NextRequest) {
     const { user } = auth;
     const body = await request.json();
 
-    // Get the company to fetch fee rates
-    const company = await StockCompany.findOne({
-      _id: body.companyId,
-      userId: user._id,
-    });
-    if (!company) {
-      return NextResponse.json(
-        { error: "Không tìm thấy công ty chứng khoán" },
-        { status: 400 }
-      );
-    }
-
-    // Add fee rates to the order
-    // For BUY: use buyFeeRate, For SELL: use sellFeeRate
     const orderData = {
       ...body,
-      feeRate: body.type === "BUY" ? company.buyFeeRate : company.sellFeeRate,
-      taxRate: company.taxRate,
       userId: user._id,
     };
 

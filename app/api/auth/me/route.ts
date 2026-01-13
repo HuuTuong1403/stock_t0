@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
-import { requireAuth } from "@/lib/auth";
+import { requireAuth } from "@/lib/services/auth";
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,7 +22,9 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error fetching current user:", error);
-    return NextResponse.json({ error: "Lỗi tải thông tin người dùng" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Lỗi tải thông tin người dùng" },
+      { status: 500 }
+    );
   }
 }
-

@@ -11,4 +11,9 @@ export {
   type DividendType,
 } from "./Dividend";
 export { default as StockCompany, type IStockCompany } from "./StockCompany";
+export {
+  default as StockUser,
+  type IStockUser,
+  type StockUserWithCompany,
+} from "./StockUser";
 export { default as User, type IUser, type UserType } from "./User";

@@ -1,7 +1,18 @@
 "use client";
 
+import { toast } from "sonner";
+
 import { useState, useRef } from "react";
+import { Download, Upload, FileSpreadsheet, X } from "lucide-react";
+
+import {
+  exportExcel,
+  exportExcelTemplate,
+  importExcel,
+} from "@/lib/services/excel";
+
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
@@ -10,9 +21,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Progress } from "@/components/ui/progress";
-import { Download, Upload, FileSpreadsheet, X } from "lucide-react";
-import { toast } from "sonner";
 
 interface ImportExportDialogProps {
   type: "t0-orders" | "long-term-orders" | "dividends" | "stocks";
@@ -58,11 +66,9 @@ export function ImportExportDialog({
         });
       }, 100);
 
-      const response = await fetch(`/api/export/${type}`);
-      if (!response.ok) throw new Error("Lỗi khi xuất dữ liệu");
+      const response = await exportExcel(type);
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      const url = window.URL.createObjectURL(response);
       const a = document.createElement("a");
       a.href = url;
       a.download = `${type}-${new Date().toISOString().split("T")[0]}.xlsx`;
@@ -89,11 +95,9 @@ export function ImportExportDialog({
 
   const handleDownloadTemplate = async () => {
     try {
-      const response = await fetch(`/api/template/${type}`);
-      if (!response.ok) throw new Error("Lỗi khi tải template");
+      const response = await exportExcelTemplate(type);
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      const url = window.URL.createObjectURL(response);
       const a = document.createElement("a");
       a.href = url;
       a.download = `template-${type}.xlsx`;
@@ -136,23 +140,18 @@ export function ImportExportDialog({
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await fetch(`/api/import/${type}`, {
-        method: "POST",
-        body: formData,
-      });
+      const response = await importExcel(type, formData);
 
       clearInterval(progressInterval);
       setProgress(90);
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || "Lỗi khi import dữ liệu");
+      if (response.error) {
+        throw new Error(response.error || "Lỗi khi import dữ liệu");
       }
 
       setProgress(100);
-      setImportResult(result);
-      toast.success(result.message || "Import thành công");
+      setImportResult(response);
+      toast.success(response.message || "Import thành công");
 
       if (onSuccess) {
         onSuccess();
@@ -303,7 +302,7 @@ export function ImportExportDialog({
                     | Thất bại:{" "}
                     <span className="text-red-400">{importResult.failed}</span>
                   </p>
-                  {importResult.errors.length > 0 && (
+                  {importResult.errors && importResult.errors.length > 0 && (
                     <details className="mt-2">
                       <summary className="text-slate-400 cursor-pointer">
                         Chi tiết lỗi

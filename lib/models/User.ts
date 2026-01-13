@@ -11,7 +11,11 @@ export interface IUser extends Document {
   type: UserType;
   createdAt: Date;
   updatedAt: Date;
-  comparePassword(candidate: string): Promise<boolean>;
+  comparePassword?(candidate: string): Promise<boolean>;
+  investorToken?: string;
+  investorId?: string;
+  dnseUsername?: string;
+  dnsePassword?: string;
 }
 
 const UserSchema = new mongoose.Schema<IUser>(
@@ -41,6 +45,22 @@ const UserSchema = new mongoose.Schema<IUser>(
       type: String,
       enum: ["admin", "user"],
       default: "user",
+    },
+    investorToken: {
+      type: String,
+      default: "",
+    },
+    investorId: {
+      type: String,
+      default: "",
+    },
+    dnseUsername: {
+      type: String,
+      default: "",
+    },
+    dnsePassword: {
+      type: String,
+      default: "",
     },
   },
   {

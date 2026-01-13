@@ -1,13 +1,12 @@
-import mongoose, { Schema, Document, Model, Types } from "mongoose";
+import mongoose, { Schema, Document, Model } from "mongoose";
 
 export interface IStock extends Document {
   code: string;
   name: string;
-  marketPrice: number;
-  currentCostBasis: number;
+  industry: string;
+  marketPrice?: number;
   createdAt: Date;
   updatedAt: Date;
-  userId: Types.ObjectId;
 }
 
 const StockSchema: Schema = new Schema(
@@ -18,28 +17,21 @@ const StockSchema: Schema = new Schema(
       unique: true,
       uppercase: true,
       trim: true,
-      maxlength: [10, "Mã cổ phiếu không quá 10 ký tự"],
+      maxlength: [3, "Mã cổ phiếu không quá 3 ký tự"],
     },
     name: {
       type: String,
       required: [true, "Tên doanh nghiệp là bắt buộc"],
       trim: true,
     },
+    industry: {
+      type: String,
+      required: [true, "Ngành hàng là bắt buộc"],
+      trim: true,
+    },
     marketPrice: {
       type: Number,
       default: 0,
-      min: [0, "Giá thị trường không được âm"],
-    },
-    currentCostBasis: {
-      type: Number,
-      default: 0,
-      min: [0, "Giá vốn không được âm"],
-    },
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-      index: true,
     },
   },
   {

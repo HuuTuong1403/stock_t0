@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { User } from "@/lib/models";
-import { createSession, setSessionCookie } from "@/lib/auth";
+import { createSession, setSessionCookie } from "@/lib/services/auth";
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,12 +17,18 @@ export async function POST(request: NextRequest) {
 
     const user = await User.findOne({ username: username.toLowerCase() });
     if (!user) {
-      return NextResponse.json({ error: "Sai tài khoản hoặc mật khẩu" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Sai tài khoản hoặc mật khẩu" },
+        { status: 401 }
+      );
     }
 
     const isValid = await user.comparePassword(password);
     if (!isValid) {
-      return NextResponse.json({ error: "Sai tài khoản hoặc mật khẩu" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Sai tài khoản hoặc mật khẩu" },
+        { status: 401 }
+      );
     }
 
     const token = createSession({
@@ -48,4 +54,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Lỗi đăng nhập" }, { status: 500 });
   }
 }
-

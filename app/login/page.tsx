@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Lock, User } from "lucide-react";
 import Link from "next/link";
+import axiosClient from "@/lib/axiosClient";
+import { getErrorMessage } from "@/lib/utils/error";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,24 +22,13 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        toast.error(error.error || "Đăng nhập thất bại");
-        return;
-      }
-
+      await axiosClient.post("/auth/login", { username, password });
       toast.success("Đăng nhập thành công");
       router.push("/");
       router.refresh();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Login error:", error);
-      toast.error("Không thể đăng nhập, vui lòng thử lại");
+      toast.error(getErrorMessage(error) || "Đăng nhập thất bại");
     } finally {
       setLoading(false);
     }

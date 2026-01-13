@@ -30,6 +30,9 @@ import Link from "next/link";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import axiosClient from "@/lib/axiosClient";
+import { getErrorMessage } from "@/lib/utils/error";
 
 interface Stats {
   counts: {
@@ -53,6 +56,8 @@ interface Stats {
   }>;
   longTermPortfolio: Array<{
     stockCode: string;
+    company: string;
+    companyName: string;
     quantity: number;
     quantitySell: number;
     averageCostBasis: number;
@@ -72,7 +77,10 @@ interface Stats {
     orderCount: number;
   }>;
   t0StatsByStock: Array<{
-    _id: string;
+    stockCode: string;
+    company: string;
+    companyName: string;
+    marketPrice: number;
     orderCount: number;
     totalProfitBeforeFees: number;
     totalProfitAfterFees: number;
@@ -80,7 +88,10 @@ interface Stats {
     totalSellValue: number;
   }>;
   longTermStatsByStock: Array<{
-    _id: string;
+    stockCode: string;
+    company: string;
+    companyName: string;
+    marketPrice: number;
     buyOrders: number;
     sellOrders: number;
     totalBuyQuantity: number;
@@ -139,11 +150,12 @@ export default function DashboardPage() {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch("/api/stats");
-      const data = await res.json();
+      const { data } = await axiosClient.get("/stats");
+      console.log("🚀 => data:", data)
       setStats(data);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error fetching stats:", error);
+      toast.error(getErrorMessage(error) || "Lỗi khi tải thống kê");
     } finally {
       setLoading(false);
     }
@@ -541,6 +553,9 @@ export default function DashboardPage() {
                     <TableHead className="text-slate-300 font-semibold">
                       Mã CP
                     </TableHead>
+                    <TableHead className="text-slate-300 font-semibold">
+                      Công ty
+                    </TableHead>
                     <TableHead className="text-slate-300 font-semibold text-right">
                       Số lượng
                     </TableHead>
@@ -568,7 +583,7 @@ export default function DashboardPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {stats.longTermPortfolio.map((stock) => {
+                  {stats.longTermPortfolio.map((stock, index) => {
                     const profitByAvg =
                       stock.marketPrice - stock.averageCostBasis;
                     const profitByCurrent =
@@ -587,12 +602,17 @@ export default function DashboardPage() {
 
                     return (
                       <TableRow
-                        key={stock.stockCode}
+                        key={`${stock.stockCode}-${stock.company}-${index}`}
                         className="border-slate-700 hover:bg-slate-700/30"
                       >
                         <TableCell>
                           <span className="font-mono font-semibold text-cyan-400">
                             {stock.stockCode}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-slate-400">
+                            {stock.companyName || "-"}
                           </span>
                         </TableCell>
                         <TableCell className="text-right text-slate-200">
@@ -693,7 +713,7 @@ export default function DashboardPage() {
                   })}
                   <TableRow className="border-slate-700 hover:bg-slate-700/30">
                     <TableCell
-                      colSpan={5}
+                      colSpan={6}
                       className="text-right text-cyan-400 font-bold"
                     >
                       Tổng lãi/lỗ:
@@ -794,6 +814,12 @@ export default function DashboardPage() {
                           <TableHead className="text-slate-300 font-semibold">
                             Mã CP
                           </TableHead>
+                          <TableHead className="text-slate-300 font-semibold">
+                            Công ty
+                          </TableHead>
+                          <TableHead className="text-slate-300 font-semibold text-right">
+                            Giá TT
+                          </TableHead>
                           <TableHead className="text-slate-300 font-semibold text-right">
                             Số lệnh
                           </TableHead>
@@ -809,15 +835,25 @@ export default function DashboardPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {stats.t0StatsByStock.map((stock) => (
+                        {stats.t0StatsByStock.map((stock, index) => (
                           <TableRow
-                            key={stock._id}
+                            key={`${stock.stockCode}-${stock.company}-${index}`}
                             className="border-slate-700 hover:bg-slate-700/30"
                           >
                             <TableCell>
                               <span className="font-mono font-semibold text-yellow-400">
-                                {stock._id}
+                                {stock.stockCode}
                               </span>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm text-slate-400">
+                                {stock.companyName || "-"}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right text-slate-200">
+                              {stock.marketPrice > 0
+                                ? formatCurrency(stock.marketPrice)
+                                : "-"}
                             </TableCell>
                             <TableCell className="text-right text-slate-200">
                               {stock.orderCount}
@@ -861,6 +897,12 @@ export default function DashboardPage() {
                           <TableHead className="text-slate-300 font-semibold">
                             Mã CP
                           </TableHead>
+                          <TableHead className="text-slate-300 font-semibold">
+                            Công ty
+                          </TableHead>
+                          <TableHead className="text-slate-300 font-semibold text-right">
+                            Giá TT
+                          </TableHead>
                           <TableHead className="text-slate-300 font-semibold text-right">
                             Lệnh MUA
                           </TableHead>
@@ -885,15 +927,25 @@ export default function DashboardPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {stats.longTermStatsByStock.map((stock) => (
+                        {stats.longTermStatsByStock.map((stock, index) => (
                           <TableRow
-                            key={stock._id}
+                            key={`${stock.stockCode}-${stock.company}-${index}`}
                             className="border-slate-700 hover:bg-slate-700/30"
                           >
                             <TableCell>
                               <span className="font-mono font-semibold text-cyan-400">
-                                {stock._id}
+                                {stock.stockCode}
                               </span>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm text-slate-400">
+                                {stock.companyName || "-"}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right text-slate-200">
+                              {stock.marketPrice > 0
+                                ? formatCurrency(stock.marketPrice)
+                                : "-"}
                             </TableCell>
                             <TableCell className="text-right text-slate-200">
                               {stock.buyOrders}
