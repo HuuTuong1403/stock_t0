@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify current password
-    const isValid = await fullUser.comparePassword(currentPassword);
+    const isValid = await fullUser?.comparePassword?.(currentPassword);
     if (!isValid) {
       return NextResponse.json(
         { error: "Mật khẩu hiện tại không đúng" },
