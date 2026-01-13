@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
-    
+
     const { investorToken, investorId } = user as IUser;
 
     if (user.type !== "admin") {
@@ -143,7 +143,11 @@ async function subscribeStockFromServer(
     const topic = `plaintext/quotes/krx/mdds/v2/ohlc/stock/1D/${code}`;
 
     return new Promise<void>((resolve, reject) => {
-      const client = mqtt.connect(`wss://${BROKER_HOST}:${BROKER_PORT}/wss`, {
+      const client = mqtt.connect({
+        host: BROKER_HOST,
+        port: BROKER_PORT,
+        protocol: "wss",
+        path: "/wss",
         clientId: clientId,
         username: investorId,
         password: investorToken,

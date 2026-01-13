@@ -213,16 +213,17 @@ export async function GET(request: NextRequest) {
           const BROKER_PORT = 443;
           const CLIENT_ID_PREFIX = "dnse-price-json-mqtt-ws-sub-";
           const newClientId = `${CLIENT_ID_PREFIX}${randomInt(1000, 2000)}`;
-          const newClient = mqtt.connect(
-            `wss://${BROKER_HOST}:${BROKER_PORT}/wss`,
-            {
-              clientId: newClientId,
-              username: newCredentials.investorId,
-              password: newCredentials.investorToken,
-              rejectUnauthorized: false,
-              protocolVersion: 5,
-            }
-          );
+          const newClient = mqtt.connect({
+            host: BROKER_HOST,
+            port: BROKER_PORT,
+            protocol: "wss",
+            path: "/wss",
+            clientId: newClientId,
+            username: newCredentials.investorId,
+            password: newCredentials.investorToken,
+            rejectUnauthorized: false,
+            protocolVersion: 5,
+          });
 
           mqttClient = newClient;
 
@@ -291,7 +292,11 @@ export async function GET(request: NextRequest) {
       const clientId = `${CLIENT_ID_PREFIX}${randomInt(1000, 2000)}`;
 
       // Create MQTT client
-      mqttClient = mqtt.connect(`wss://${BROKER_HOST}:${BROKER_PORT}/wss`, {
+      mqttClient = mqtt.connect({
+        host: BROKER_HOST,
+        port: BROKER_PORT,
+        protocol: "wss",
+        path: "/wss",
         clientId: clientId,
         username: investorId,
         password: investorToken,
