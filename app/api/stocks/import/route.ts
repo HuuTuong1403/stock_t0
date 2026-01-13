@@ -59,7 +59,7 @@ async function subscribeStockFromServer(
           if (!messageReceived) {
             messageReceived = true;
             const payload = JSON.parse(message.toString());
-            console.log("🚀 => payload:", payload)
+            console.log("🚀 => payload:", payload);
             const stock = await Stock.findOne({ code: payload.symbol });
 
             if (stock && payload.close) {
@@ -78,23 +78,27 @@ async function subscribeStockFromServer(
 
       client.on("error", async (error) => {
         const errorMessage = error.message || String(error);
-        
+
         // Check if it's an authentication error
         if (
           errorMessage.includes("Bad User Name or Password") ||
           errorMessage.includes("Not authorized") ||
           errorMessage.includes("Authentication failed")
         ) {
-          console.log(`MQTT authentication failed for ${code}, attempting to refresh token...`);
-          
+          console.log(
+            `MQTT authentication failed for ${code}, attempting to refresh token...`
+          );
+
           try {
             // Try to refresh token
             const { refreshDnseToken } = await import("@/lib/services/dnse");
             const newCredentials = await refreshDnseToken(userId);
-            
+
             if (newCredentials) {
-              console.log(`Token refreshed for ${code}, retrying connection...`);
-              
+              console.log(
+                `Token refreshed for ${code}, retrying connection...`
+              );
+
               // Close old client
               clearTimeout(timeout);
               client.removeAllListeners();
@@ -106,21 +110,26 @@ async function subscribeStockFromServer(
                   // Ignore errors during cleanup
                 }
               }
-              
+
               // Retry with new credentials
               setTimeout(() => {
-                subscribeStockFromServer(code, newCredentials.investorToken, newCredentials.investorId, userId)
+                subscribeStockFromServer(
+                  code,
+                  newCredentials.investorToken,
+                  newCredentials.investorId,
+                  userId
+                )
                   .then(resolve)
                   .catch(reject);
               }, 1000);
-              
+
               return; // Don't reject, we're retrying
             }
           } catch (refreshError) {
             console.error(`Failed to refresh token for ${code}:`, refreshError);
           }
         }
-        
+
         // Other errors or refresh failed
         clearTimeout(timeout);
         client.end();
@@ -215,7 +224,18 @@ export async function POST(request: NextRequest) {
         if (existingStock) {
           // Update existing stock
           existingStock.name = name;
-          existingStock.marketPrice = 0;
+          if (existingStock.marketPrice === 0) {
+            if (investorToken && investorId) {
+              subscribeStockFromServer(
+                code,
+                investorToken,
+                investorId,
+                user._id.toString()
+              ).catch((error) => {
+                console.error(`Error subscribing ${code} after import:`, error);
+              });
+            }
+          }
           existingStock.industry = industry;
           await existingStock.save();
           results.success++;
@@ -233,11 +253,14 @@ export async function POST(request: NextRequest) {
           // Gọi subscribeStock ngay sau khi tạo stock mới để lấy giá
           if (investorToken && investorId) {
             // Gọi async nhưng không await để không làm chậm quá trình import
-            subscribeStockFromServer(code, investorToken, investorId, user._id.toString()).catch(
-              (error) => {
-                console.error(`Error subscribing ${code} after import:`, error);
-              }
-            );
+            subscribeStockFromServer(
+              code,
+              investorToken,
+              investorId,
+              user._id.toString()
+            ).catch((error) => {
+              console.error(`Error subscribing ${code} after import:`, error);
+            });
           }
         }
       } catch (error) {
