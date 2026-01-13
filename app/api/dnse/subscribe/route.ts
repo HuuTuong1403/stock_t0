@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   const topic =
     searchParams.get("topic") || "plaintext/quotes/krx/mdds/v2/ohlc/index/1D/+";
 
-  const user = await User.findById("6963b7df5d7abb8710455ab1");
+  const user = await User.findById("6965f14d5ad4273f2010d5a4");
   if (!user) {
     return new Response(JSON.stringify({ error: "User not found" }), {
       status: 404,
@@ -185,7 +185,7 @@ export async function GET(request: NextRequest) {
 
         // Try to refresh token
         const newCredentials = await refreshDnseToken(
-          "6963b7df5d7abb8710455ab1"
+          "6965f14d5ad4273f2010d5a4"
         );
 
         if (newCredentials) {

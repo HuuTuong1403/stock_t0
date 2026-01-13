@@ -155,7 +155,7 @@ async function updatePrices() {
   await dbConnect();
 
   // Get user credentials (using hardcoded user ID for now, same as subscribe route)
-  const userId = "6963b7df5d7abb8710455ab1";
+  const userId = "6965f14d5ad4273f2010d5a4";
   const user = await User.findById(userId);
   if (!user) {
     throw new Error("User not found");

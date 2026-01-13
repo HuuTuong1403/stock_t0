@@ -1,6 +1,5 @@
-import dbConnect from "@/lib/mongodb";
 import User from "@/lib/models/User";
-import { IUser } from "@/lib/models/User";
+import dbConnect from "@/lib/mongodb";
 
 /**
  * Refresh DNSE token tự động khi gặp lỗi authentication
