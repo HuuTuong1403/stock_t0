@@ -3,7 +3,7 @@ import { randomInt } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import dbConnect from "@/lib/mongodb";
-import { IUser, Stock } from "@/lib/models";
+import { IUser, Stock, User } from "@/lib/models";
 import { requireAuth } from "@/lib/services/auth";
 
 export async function GET(request: NextRequest) {
@@ -82,7 +82,11 @@ export async function POST(request: NextRequest) {
     if (!auth) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const { user } = auth;
+    const user = await User.findById(auth.user._id);
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+    
     const { investorToken, investorId } = user as IUser;
 
     if (user.type !== "admin") {
