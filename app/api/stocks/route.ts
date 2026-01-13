@@ -14,14 +14,6 @@ export async function GET(request: NextRequest) {
     if (!auth) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const { user } = auth;
-
-    if (user.type !== "admin") {
-      return NextResponse.json(
-        { error: "Bạn không có quyền truy cập" },
-        { status: 403 }
-      );
-    }
 
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get("page") || "1", 10);
