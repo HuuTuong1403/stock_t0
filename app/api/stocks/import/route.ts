@@ -1,159 +1,11 @@
 import * as XLSX from "xlsx";
 import { NextRequest, NextResponse } from "next/server";
-import mqtt from "mqtt";
-import { randomInt } from "crypto";
 
 import dbConnect from "@/lib/mongodb";
 import { Stock, User } from "@/lib/models";
-import { requireAuth } from "@/lib/services/auth";
 import { IUser } from "@/lib/models/User";
-
-export const runtime = "nodejs";
-
-/**
- * Helper function để subscribe stock từ server-side
- * Tạo MQTT connection, subscribe topic để lấy giá, sau đó disconnect
- */
-async function subscribeStockFromServer(
-  code: string,
-  investorToken: string,
-  investorId: string,
-  userId: string
-) {
-  try {
-    const BROKER_HOST = "datafeed-lts-krx.dnse.com.vn";
-    const BROKER_PORT = 443;
-    const CLIENT_ID_PREFIX = "dnse-price-json-mqtt-ws-sub-";
-    const clientId = `${CLIENT_ID_PREFIX}${randomInt(1000, 2000)}`;
-    const topic = `plaintext/quotes/krx/mdds/v2/ohlc/stock/1D/${code}`;
-
-    return new Promise<void>((resolve, reject) => {
-      const client = mqtt.connect({
-        host: BROKER_HOST,
-        port: BROKER_PORT,
-        protocol: "wss",
-        path: "/wss",
-        clientId: clientId,
-        username: investorId,
-        password: investorToken,
-        rejectUnauthorized: false,
-        protocolVersion: 5,
-      });
-
-      const timeout = setTimeout(() => {
-        client.end();
-        reject(new Error("Subscribe timeout"));
-      }, 10000); // 10 seconds timeout
-
-      let messageReceived = false;
-
-      client.on("connect", () => {
-        client.subscribe(topic, { qos: 1 }, (err) => {
-          if (err) {
-            clearTimeout(timeout);
-            client.end();
-            reject(err);
-          }
-        });
-      });
-
-      // Khi nhận được message, cập nhật giá và disconnect
-      client.on("message", async (receivedTopic, message) => {
-        try {
-          if (!messageReceived) {
-            messageReceived = true;
-            const payload = JSON.parse(message.toString());
-            console.log("🚀 => payload:", payload);
-            const stock = await Stock.findOne({ code: payload.symbol });
-
-            if (stock && payload.close) {
-              stock.marketPrice = payload.close * 1000;
-              await stock.save();
-            }
-
-            clearTimeout(timeout);
-            client.end();
-            resolve();
-          }
-        } catch (error) {
-          console.error(`Error processing message for ${code}:`, error);
-        }
-      });
-
-      client.on("error", async (error) => {
-        const errorMessage = error.message || String(error);
-
-        // Check if it's an authentication error
-        if (
-          errorMessage.includes("Bad User Name or Password") ||
-          errorMessage.includes("Not authorized") ||
-          errorMessage.includes("Authentication failed")
-        ) {
-          console.log(
-            `MQTT authentication failed for ${code}, attempting to refresh token...`
-          );
-
-          try {
-            // Try to refresh token
-            const { refreshDnseToken } = await import("@/lib/services/dnse");
-            const newCredentials = await refreshDnseToken(userId);
-
-            if (newCredentials) {
-              console.log(
-                `Token refreshed for ${code}, retrying connection...`
-              );
-
-              // Close old client
-              clearTimeout(timeout);
-              client.removeAllListeners();
-              if (client.connected) {
-                try {
-                  client.unsubscribe(topic);
-                  client.end();
-                } catch {
-                  // Ignore errors during cleanup
-                }
-              }
-
-              // Retry with new credentials
-              setTimeout(() => {
-                subscribeStockFromServer(
-                  code,
-                  newCredentials.investorToken,
-                  newCredentials.investorId,
-                  userId
-                )
-                  .then(resolve)
-                  .catch(reject);
-              }, 1000);
-
-              return; // Don't reject, we're retrying
-            }
-          } catch (refreshError) {
-            console.error(`Failed to refresh token for ${code}:`, refreshError);
-          }
-        }
-
-        // Other errors or refresh failed
-        clearTimeout(timeout);
-        client.end();
-        reject(error);
-      });
-
-      // Nếu không nhận được message sau 5 giây, vẫn disconnect (có thể stock chưa có data)
-      setTimeout(() => {
-        if (!messageReceived) {
-          clearTimeout(timeout);
-          client.end();
-          resolve(); // Resolve thay vì reject để không làm gián đoạn import
-        }
-      }, 5000);
-    });
-  } catch (error) {
-    console.error(`Error subscribing stock ${code}:`, error);
-    // Không throw error để không làm gián đoạn quá trình import
-  }
-}
+import { requireAuth } from "@/lib/services/auth";
+import { subscribeStock } from "@/lib/services/wss-client";
 
 export async function POST(request: NextRequest) {
   try {
@@ -228,17 +80,13 @@ export async function POST(request: NextRequest) {
         if (existingStock) {
           // Update existing stock
           existingStock.name = name;
-          if (existingStock.marketPrice === 0) {
-            if (investorToken && investorId) {
-              subscribeStockFromServer(
-                code,
-                investorToken,
-                investorId,
-                user._id.toString()
-              ).catch((error) => {
-                console.error(`Error subscribing ${code} after import:`, error);
-              });
-            }
+          if (investorToken && investorId) {
+            await subscribeStock(
+              code,
+              investorToken,
+              investorId,
+              user._id.toString()
+            ).catch(console.error);
           }
           existingStock.industry = industry;
           await existingStock.save();
@@ -254,17 +102,13 @@ export async function POST(request: NextRequest) {
           results.data.push(code);
           results.success++;
 
-          // Gọi subscribeStock ngay sau khi tạo stock mới để lấy giá
           if (investorToken && investorId) {
-            // Gọi async nhưng không await để không làm chậm quá trình import
-            subscribeStockFromServer(
+            await subscribeStock(
               code,
               investorToken,
               investorId,
               user._id.toString()
-            ).catch((error) => {
-              console.error(`Error subscribing ${code} after import:`, error);
-            });
+            ).catch(console.error);
           }
         }
       } catch (error) {
