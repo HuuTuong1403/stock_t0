@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const isValid = await user.comparePassword(password);
+    const isValid = await user?.comparePassword?.(password);
     if (!isValid) {
       return NextResponse.json(
         { error: "Sai tài khoản hoặc mật khẩu" },
