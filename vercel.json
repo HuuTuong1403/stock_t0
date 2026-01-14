@@ -1,13 +1,8 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
       "path": "/api/stocks/update-prices",
-      "schedule": "0 12 * * *"
-    },
-    {
-      "path": "/api/stocks/update-prices",
-      "schedule": "0 15 * * *"
+      "schedule": "0 5,9 * * *"
     }
   ]
 }
