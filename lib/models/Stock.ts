@@ -5,6 +5,11 @@ export interface IStock extends Document {
   name: string;
   industry: string;
   marketPrice?: number;
+  openPrice?: number;
+  closePrice?: number;
+  highPrice?: number;
+  lowPrice?: number;
+  volume?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -30,6 +35,22 @@ const StockSchema: Schema = new Schema(
       trim: true,
     },
     marketPrice: {
+      type: Number,
+      default: 0,
+    },
+    openPrice: {
+      type: Number,
+      default: 0,
+    },
+    highPrice: {
+      type: Number,
+      default: 0,
+    },
+    lowPrice: {
+      type: Number,
+      default: 0,
+    },
+    volume: {
       type: Number,
       default: 0,
     },

@@ -14,14 +14,7 @@ if (!MONGODB_URI) {
 
 // ==== IMPORT MODEL ====
 // Import model bạn muốn migrate (bỏ comment khi cần dùng)
-import {
-  Dividend,
-  LongTermOrder,
-  Stock,
-  StockCompany,
-  T0Order,
-  User,
-} from "../lib/models";
+import { Stock } from "../lib/models";
 // import { Stock, T0Order, LongTermOrder } from "../lib/models";
 
 async function main() {
@@ -106,14 +99,15 @@ async function main() {
   // ============================================
 
   // Ví dụ: Thêm field userId cho documents chưa có
-  const res = await User.updateMany(
-    { investorToken: { $exists: false } }, // Lọc documents chưa có userId
-    {
-      $set: {
-        investorToken: "",
-        investorId: "",
+  const res = await Stock.updateMany(
+    {}, // Lọc documents chưa có userId
+    [
+      {
+        $set: {
+          newFieldName: "$oldFieldName", // Copy giá trị từ field cũ
+        },
       },
-    }
+    ]
   );
 
   console.log("📊 Migration Results:");

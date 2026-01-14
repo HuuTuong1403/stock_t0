@@ -46,6 +46,10 @@ interface Stock {
   name: string;
   industry: string;
   marketPrice?: number;
+  highPrice?: number;
+  lowPrice?: number;
+  openPrice?: number;
+  volumn?: number;
   createdAt: string;
 }
 
@@ -339,6 +343,18 @@ export default function StocksPage() {
                         Giá thị trướng
                       </TableHead>
                       <TableHead className="text-slate-300 font-semibold text-right">
+                        Giá thấp nhất
+                      </TableHead>
+                      <TableHead className="text-slate-300 font-semibold text-right">
+                        Giá cao nhất
+                      </TableHead>
+                      <TableHead className="text-slate-300 font-semibold text-right">
+                        Giá mở cửa
+                      </TableHead>
+                      <TableHead className="text-slate-300 font-semibold text-right">
+                        Khối lượng giao dịch
+                      </TableHead>
+                      <TableHead className="text-slate-300 font-semibold text-right">
                         Thao tác
                       </TableHead>
                     </TableRow>
@@ -379,6 +395,26 @@ export default function StocksPage() {
                             <TableCell className="text-right text-slate-200">
                               {stock.marketPrice && stock.marketPrice > 0
                                 ? formatCurrency(stock.marketPrice)
+                                : "-"}
+                            </TableCell>
+                            <TableCell className="text-right text-slate-200">
+                              {stock.lowPrice && stock.lowPrice > 0
+                                ? formatCurrency(stock.lowPrice)
+                                : "-"}
+                            </TableCell>
+                            <TableCell className="text-right text-slate-200">
+                              {stock.highPrice && stock.highPrice > 0
+                                ? formatCurrency(stock.highPrice)
+                                : "-"}
+                            </TableCell>
+                            <TableCell className="text-right text-slate-200">
+                              {stock.openPrice && stock.openPrice > 0
+                                ? formatCurrency(stock.openPrice)
+                                : "-"}
+                            </TableCell>
+                            <TableCell className="text-right text-slate-200">
+                              {stock.volumn && stock.volumn > 0
+                                ? stock.volumn
                                 : "-"}
                             </TableCell>
                             <TableCell className="text-right">
