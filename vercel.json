@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/stocks/update-prices",
-      "schedule": "0 9 * * *"
+      "schedule": "0 8 * * *"
     }
   ]
 }
