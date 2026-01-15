@@ -2,7 +2,11 @@
   "crons": [
     {
       "path": "/api/stocks/update-prices",
-      "schedule": "0 5,9 * * *"
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/stocks/update-prices",
+      "schedule": "0 9 * * *"
     }
   ]
 }
