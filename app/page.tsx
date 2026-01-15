@@ -143,6 +143,7 @@ const quickLinks = [
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  console.log('Test')
 
   useEffect(() => {
     fetchStats();
