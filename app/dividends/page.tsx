@@ -191,11 +191,6 @@ export default function DividendsPage() {
   };
 
   const handleAdjustOrders = async (dividend: Dividend) => {
-    if (dividend.type !== "STOCK") {
-      toast.info("Chỉ cổ tức cổ phiếu mới cần điều chỉnh lệnh");
-      return;
-    }
-
     if (
       !confirm(
         `Điều chỉnh tất cả lệnh giao dịch ${
@@ -529,7 +524,7 @@ export default function DividendsPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            {dividend.type === "STOCK" && !dividend.isUsed && (
+                            {!dividend.isUsed && (
                               <Button
                                 size="icon"
                                 variant="ghost"

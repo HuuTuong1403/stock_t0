@@ -4,7 +4,18 @@ import { Dividend, LongTermOrder } from "@/lib/models";
 import { requireAuth } from "@/lib/services/auth";
 
 /**
- * Adjust stock orders based on dividend split
+ * Adjust stock orders based on dividend (both STOCK and CASH)
+ *
+ * STOCK DIVIDEND (cổ tức cổ phiếu):
+ *   - Số lượng cổ phiếu tăng theo tỷ lệ (1 + value/100)
+ *   - Giá giảm tương ứng để giữ tổng giá trị
+ *   - VD: 10% stock dividend → 100 cổ phiếu @ 50k → 110 cổ phiếu @ 45.45k
+ *
+ * CASH DIVIDEND (cổ tức tiền mặt):
+ *   - Số lượng cổ phiếu không đổi
+ *   - Giá giảm theo % cổ tức (ex-dividend effect)
+ *   - VD: 10% cash dividend → 100 cổ phiếu @ 50k → 100 cổ phiếu @ 45k
+ *
  * POST /api/dividends/adjust-orders
  * Body: { dividendId: string }
  */
@@ -39,17 +50,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Only adjust for stock dividends, not cash
-    if (dividend.type !== "STOCK") {
-      return NextResponse.json({
-        message: "Cổ tức tiền mặt không cần điều chỉnh",
-        adjusted: 0,
-      });
-    }
-
-    const splitRatio = 1 + dividend.value / 100; // e.g., 10% -> 1.1
-
-    // Find all long-term orders before the split date with the same stock code
+    // Find all long-term orders before the dividend date with the same stock code
     // Note: T0 orders are intraday trades (closed positions), so they are NOT adjusted
     const longTermOrders = await LongTermOrder.find({
       stockCode: dividend.stockCode,
@@ -59,8 +60,18 @@ export async function POST(request: NextRequest) {
 
     let adjustedCount = 0;
 
-    // ===== Adjust Long-term Orders =====
-    if (longTermOrders.length > 0) {
+    if (longTermOrders.length === 0) {
+      return NextResponse.json({
+        message: "Không có lệnh dài hạn nào cần điều chỉnh",
+        adjusted: 0,
+      });
+    }
+
+    // ===== Adjust based on dividend type =====
+    if (dividend.type === "STOCK") {
+      // STOCK DIVIDEND: Tăng số lượng, giảm giá
+      const splitRatio = 1 + dividend.value / 100; // e.g., 10% -> 1.1
+
       // Calculate total quantity
       const totalLTQuantity = longTermOrders.reduce(
         (sum, order) => sum + order.quantity,
@@ -103,7 +114,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Apply the adjusted quantities
+      // Apply the adjusted quantities and prices
       for (let i = 0; i < longTermOrders.length; i++) {
         const order = longTermOrders[i];
 
@@ -123,9 +134,26 @@ export async function POST(request: NextRequest) {
         await order.save();
         adjustedCount++;
       }
+    } else {
+      // CASH DIVIDEND: Giá giảm, số lượng không đổi
+      // Giá giảm theo % cổ tức: newPrice = oldPrice * (1 - dividend.value/100)
+      const priceAdjustmentRatio = 1 - dividend.value / 100; // e.g., 10% -> 0.9
 
-      await Dividend.findByIdAndUpdate(dividendId, { isUsed: true });
+      for (const order of longTermOrders) {
+        // Adjust price down by dividend percentage
+        order.price = order.price * priceAdjustmentRatio;
+
+        // Quantity remains the same for cash dividends
+        // costBasis remains the same (no quantity change)
+
+        // Recalculate will happen in pre-save middleware
+        await order.save();
+        adjustedCount++;
+      }
     }
+
+    // Mark dividend as used
+    await Dividend.findByIdAndUpdate(dividendId, { isUsed: true });
 
     return NextResponse.json({
       message: `Đã điều chỉnh ${adjustedCount} lệnh dài hạn`,
@@ -136,6 +164,10 @@ export async function POST(request: NextRequest) {
         value: dividend.value,
         type: dividend.type,
       },
+      adjustmentType:
+        dividend.type === "STOCK"
+          ? "Tăng số lượng, giảm giá (stock dividend)"
+          : "Giảm giá, số lượng không đổi (cash dividend)",
       note: "Lệnh T0 (giao dịch trong ngày) không bị điều chỉnh vì đã đóng vị thế",
     });
   } catch (error) {

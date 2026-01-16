@@ -139,26 +139,31 @@ LongTermOrderSchema.pre("save", async function () {
       this.isModified("tradeDate")
     ) {
       // Only take BUY orders strictly before this SELL order's trade date, same company and same user
-      const buyOrders = await mongoose.models.LongTermOrder.find({
+      const longTermOrders = await mongoose.models.LongTermOrder.find({
         stockCode: doc.stockCode,
-        type: "BUY",
         company: doc.company,
         userId: doc.userId,
-        tradeDate: { $lt: doc.tradeDate },
+        tradeDate: { $lte: doc.tradeDate },
       }).sort({ tradeDate: 1, createdAt: 1 });
 
-      if (buyOrders.length > 0) {
+      if (longTermOrders.length > 0) {
         let totalBuyQuantity = 0;
         let totalBuyCostBasis = 0;
 
-        for (const buyOrder of buyOrders) {
-          totalBuyQuantity += buyOrder.quantity;
-          totalBuyCostBasis += buyOrder.costBasis;
+        for (const order of longTermOrders) {
+          if (order.type === "BUY") {
+            totalBuyQuantity += order.quantity;
+            totalBuyCostBasis += order.costBasis;
+          } else {
+            totalBuyQuantity -= order.quantity;
+            totalBuyCostBasis -= order.costBasis;
+          }
         }
 
-        const averageCostPerShare = totalBuyCostBasis / totalBuyQuantity;
+        const averageCost = totalBuyCostBasis / totalBuyQuantity;
+        const averageCostPerShare = Math.round(averageCost);
 
-        doc.costBasis = Math.round(averageCostPerShare * doc.quantity);
+        doc.costBasis = averageCostPerShare * doc.quantity;
         const sellValue = doc.quantity * doc.price;
         const feeAndTaxRate = company.sellFeeRate + company.taxRate;
 

@@ -436,7 +436,9 @@ export async function GET(request: NextRequest) {
           averageCostBasis: {
             $cond: {
               if: { $gt: ["$totalCostBasis", 0] },
-              then: { $divide: ["$totalCostBasis", "$totalQuantity"] },
+              then: {
+                $round: { $divide: ["$totalCostBasis", "$totalQuantity"] },
+              },
               else: 0,
             },
           },

@@ -600,7 +600,7 @@ export default function DashboardPage() {
                       ((stock.marketPrice - stock.currentCostBasis) /
                         stock.currentCostBasis) *
                       100;
-
+                    
                     return (
                       <TableRow
                         key={`${stock.stockCode}-${stock.company}-${index}`}

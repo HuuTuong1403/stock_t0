@@ -8,6 +8,7 @@ export interface IDividend extends Document {
   type: DividendType;
   value: number;
   userId: Types.ObjectId;
+  isUsed: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
