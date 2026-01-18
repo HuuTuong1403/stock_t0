@@ -15,6 +15,7 @@ export interface ILongTermOrder extends Document {
   fee: number;
   tax: number;
   costBasis: number;
+  avgCost: number;
   profit: number;
   createdAt: Date;
   updatedAt: Date;
@@ -70,6 +71,10 @@ const LongTermOrderSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    avgCost: {
+      type: Number,
+      default: 0,
+    },
     profit: {
       type: Number,
       default: 0,
@@ -121,62 +126,112 @@ LongTermOrderSchema.pre("save", async function () {
     company = companyDoc;
   }
 
-  if (doc.type === "BUY") {
-    doc.fee = Math.round(value * company.buyFeeRate);
-    doc.tax = 0;
-    doc.costBasis = value + doc.fee;
-    doc.profit = 0;
-  } else {
-    // SELL - use sell fee rate (feeRate is set to sellFeeRate in API)
-    doc.fee = Math.round(value * company.sellFeeRate);
-    doc.tax = Math.round(value * company.taxRate);
+  // Calculate avgCost based on previous orders
+  if (
+    doc.isNew ||
+    this.isModified("stockCode") ||
+    this.isModified("quantity") ||
+    this.isModified("price") ||
+    this.isModified("tradeDate")
+  ) {
+    // Get all orders before this one (excluding current order)
+    const previousOrders = await mongoose.models.LongTermOrder.find({
+      stockCode: doc.stockCode,
+      company: doc.company,
+      userId: doc.userId,
+      $or: [
+        { tradeDate: { $lt: doc.tradeDate } },
+        {
+          tradeDate: doc.tradeDate,
+          createdAt: { $lt: doc.createdAt || new Date() },
+        },
+      ],
+    }).sort({ tradeDate: 1, createdAt: 1 });
 
-    // Calculate cost basis and profit based on average cost basis of previous BUY orders
-    if (
-      doc.isNew ||
-      this.isModified("stockCode") ||
-      this.isModified("quantity") ||
-      this.isModified("tradeDate")
-    ) {
-      // Only take BUY orders strictly before this SELL order's trade date, same company and same user
-      const longTermOrders = await mongoose.models.LongTermOrder.find({
-        stockCode: doc.stockCode,
-        company: doc.company,
-        userId: doc.userId,
-        tradeDate: { $lte: doc.tradeDate },
-      }).sort({ tradeDate: 1, createdAt: 1 });
+    let totalBuyQuantity = 0;
+    let totalBuyCostBasis = 0;
 
-      if (longTermOrders.length > 0) {
-        let totalBuyQuantity = 0;
-        let totalBuyCostBasis = 0;
+    // Calculate cumulative quantity and cost from previous orders
+    for (const order of previousOrders) {
+      if (order.type === "BUY") {
+        totalBuyQuantity += order.quantity;
+        totalBuyCostBasis += order.costBasis;
+      } else {
+        totalBuyQuantity -= order.quantity;
+        totalBuyCostBasis -= order.costBasis;
+      }
+    }
 
-        for (const order of longTermOrders) {
-          if (order.type === "BUY") {
-            totalBuyQuantity += order.quantity;
-            totalBuyCostBasis += order.costBasis;
-          } else {
-            totalBuyQuantity -= order.quantity;
-            totalBuyCostBasis -= order.costBasis;
-          }
-        }
+    // Get the most recent order (BUY or SELL) to inherit avgCost
+    const lastOrder = previousOrders[previousOrders.length - 1];
+    const previousAvgCost = lastOrder?.avgCost || 0;
 
+    if (doc.type === "BUY") {
+      doc.fee = Math.round(value * company.buyFeeRate);
+      doc.tax = 0;
+      doc.costBasis = value + doc.fee;
+      doc.profit = 0;
+
+      // Calculate avgCost based on previous avgCost and new purchase
+      if (previousAvgCost > 0 && totalBuyQuantity > 0) {
+        // Weighted average: (previous avgCost × remaining quantity + new costBasis) / new total quantity
+        const newTotalQuantity = totalBuyQuantity + doc.quantity;
+        const newTotalCostBasis =
+          previousAvgCost * totalBuyQuantity + doc.costBasis;
+        doc.avgCost = Math.round(newTotalCostBasis / newTotalQuantity);
+      } else {
+        // First BUY order or no previous avgCost
+        const newTotalQuantity = totalBuyQuantity + doc.quantity;
+        const newTotalCostBasis = totalBuyCostBasis + doc.costBasis;
+        doc.avgCost = Math.round(newTotalCostBasis / newTotalQuantity);
+      }
+    } else {
+      // SELL - use sell fee rate
+      doc.fee = Math.round(value * company.sellFeeRate);
+      doc.tax = Math.round(value * company.taxRate);
+
+      if (previousAvgCost > 0) {
+        // Use avgCost from the most recent order (BUY or SELL)
+        doc.avgCost = previousAvgCost;
+        doc.costBasis = previousAvgCost * doc.quantity;
+
+        const sellValue = doc.quantity * doc.price;
+        const feeAndTaxRate = company.sellFeeRate + company.taxRate;
+        const firstPart = sellValue - sellValue * feeAndTaxRate;
+        const secondPart = doc.quantity * previousAvgCost;
+
+        doc.profit = Math.round(firstPart - secondPart);
+      } else if (totalBuyQuantity > 0) {
+        // Fallback: calculate weighted average if no previous order has avgCost
         const averageCost = totalBuyCostBasis / totalBuyQuantity;
         const averageCostPerShare = Math.round(averageCost);
 
+        doc.avgCost = averageCostPerShare;
         doc.costBasis = averageCostPerShare * doc.quantity;
+
         const sellValue = doc.quantity * doc.price;
         const feeAndTaxRate = company.sellFeeRate + company.taxRate;
-
         const firstPart = sellValue - sellValue * feeAndTaxRate;
-
         const secondPart = doc.quantity * averageCostPerShare;
 
         doc.profit = Math.round(firstPart - secondPart);
       } else {
-        // No previous BUY orders found, set costBasis to 0
+        // No previous BUY orders found
+        doc.avgCost = 0;
         doc.costBasis = 0;
         doc.profit = Math.round(value - doc.fee - doc.tax);
       }
+    }
+  } else {
+    // If not modifying key fields, just update fees for existing order
+    if (doc.type === "BUY") {
+      doc.fee = Math.round(value * company.buyFeeRate);
+      doc.tax = 0;
+      doc.costBasis = value + doc.fee;
+      doc.profit = 0;
+    } else {
+      doc.fee = Math.round(value * company.sellFeeRate);
+      doc.tax = Math.round(value * company.taxRate);
     }
   }
 });

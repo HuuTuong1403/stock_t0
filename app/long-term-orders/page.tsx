@@ -54,6 +54,7 @@ interface LongTermOrder {
   fee: number;
   tax: number;
   costBasis: number;
+  avgCost: number;
   profit: number;
   createdAt?: string;
 }
@@ -248,7 +249,10 @@ export default function LongTermOrdersPage() {
     // Get all orders of the same stockCode up to and including current order
     // Sort by tradeDate first, then by createdAt for same date, then by _id
     const sameStockOrders = orders
-    .filter((o) => o.stockCode === order.stockCode && o.company._id === order.company._id)
+      .filter(
+        (o) =>
+          o.stockCode === order.stockCode && o.company._id === order.company._id
+      )
       .sort((a, b) => {
         const dateA = new Date(a.tradeDate).getTime();
         const dateB = new Date(b.tradeDate).getTime();
@@ -642,6 +646,9 @@ export default function LongTermOrdersPage() {
                       Thuế
                     </TableHead>
                     <TableHead className="text-slate-300 font-semibold text-right">
+                      Giá vốn TB
+                    </TableHead>
+                    <TableHead className="text-slate-300 font-semibold text-right">
                       Lợi nhuận
                     </TableHead>
                     <TableHead className="text-slate-300 font-semibold text-right">
@@ -719,6 +726,9 @@ export default function LongTermOrdersPage() {
                             {order.type === "SELL"
                               ? formatCurrency(order.tax)
                               : "-"}
+                          </TableCell>
+                          <TableCell className="text-right text-slate-400">
+                            {formatCurrency(order.avgCost)}
                           </TableCell>
                           <TableCell
                             className={`text-right font-semibold ${

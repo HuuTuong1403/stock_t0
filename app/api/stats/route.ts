@@ -348,6 +348,15 @@ export async function GET(request: NextRequest) {
           },
         },
       },
+      // Sort to get the most recent order
+      {
+        $sort: {
+          stockCode: 1,
+          company: 1,
+          tradeDate: 1,
+          createdAt: 1,
+        },
+      },
       {
         $group: {
           _id: {
@@ -391,6 +400,8 @@ export async function GET(request: NextRequest) {
             },
           },
           stockUserCostPrice: { $first: "$stockUserInfo.costPrice" },
+          // Get the most recent order's avgCost
+          latestAvgCost: { $last: "$avgCost" },
         },
       },
       {
@@ -435,11 +446,19 @@ export async function GET(request: NextRequest) {
           quantitySell: "$totalQuantitySell",
           averageCostBasis: {
             $cond: {
-              if: { $gt: ["$totalCostBasis", 0] },
-              then: {
-                $round: { $divide: ["$totalCostBasis", "$totalQuantity"] },
+              // If latestAvgCost exists and is greater than 0, use it
+              if: { $gt: ["$latestAvgCost", 0] },
+              then: "$latestAvgCost",
+              // Otherwise, calculate from totalCostBasis / totalQuantity
+              else: {
+                $cond: {
+                  if: { $gt: ["$totalCostBasis", 0] },
+                  then: {
+                    $round: { $divide: ["$totalCostBasis", "$totalQuantity"] },
+                  },
+                  else: 0,
+                },
               },
-              else: 0,
             },
           },
           marketPrice: { $ifNull: ["$stockInfo.marketPrice", 0] },

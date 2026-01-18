@@ -143,7 +143,7 @@ const quickLinks = [
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  console.log('Test')
+  console.log("Test");
 
   useEffect(() => {
     fetchStats();
@@ -152,7 +152,6 @@ export default function DashboardPage() {
   const fetchStats = async () => {
     try {
       const { data } = await axiosClient.get("/stats");
-      console.log("🚀 => data:", data)
       setStats(data);
     } catch (error: unknown) {
       console.error("Error fetching stats:", error);
@@ -587,6 +586,7 @@ export default function DashboardPage() {
                   {stats.longTermPortfolio.map((stock, index) => {
                     const profitByAvg =
                       stock.marketPrice - stock.averageCostBasis;
+
                     const profitByCurrent =
                       stock.currentCostBasis > 0
                         ? stock.marketPrice - stock.currentCostBasis
@@ -600,7 +600,7 @@ export default function DashboardPage() {
                       ((stock.marketPrice - stock.currentCostBasis) /
                         stock.currentCostBasis) *
                       100;
-                    
+
                     return (
                       <TableRow
                         key={`${stock.stockCode}-${stock.company}-${index}`}
@@ -642,7 +642,9 @@ export default function DashboardPage() {
                           }`}
                         >
                           {profitByAvg >= 0 ? "+" : ""}
-                          {formatCurrency(profitByAvg * stock.quantity)}
+                          {formatCurrency(
+                            profitByAvg * (stock.quantity - stock.quantitySell)
+                          )}
                         </TableCell>
                         <TableCell
                           className={`text-right font-semibold ${
@@ -679,7 +681,10 @@ export default function DashboardPage() {
                           {profitByCurrent !== null ? (
                             <>
                               {profitByCurrent >= 0 ? "+" : ""}
-                              {formatCurrency(profitByCurrent * stock.quantity)}
+                              {formatCurrency(
+                                profitByCurrent *
+                                  (stock.quantity - stock.quantitySell)
+                              )}
                             </>
                           ) : (
                             "-"
