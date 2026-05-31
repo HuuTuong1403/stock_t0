@@ -84,6 +84,7 @@ export default function LongTermOrdersPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<LongTermOrder | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Filters
   const [filterStock, setFilterStock] = useState("");
@@ -127,6 +128,10 @@ export default function LongTermOrdersPage() {
     fetchOrders();
     fetchStockUsers();
   }, [fetchOrders]);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [filterStock, filterType, filterStartDate, filterEndDate]);
 
   const fetchStockUsers = async () => {
     try {
@@ -198,6 +203,53 @@ export default function LongTermOrdersPage() {
     try {
       await axiosClient.delete(`/long-term-orders/${id}`);
       toast.success("Xóa lệnh thành công");
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      fetchOrders();
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error) || "Lỗi khi xóa lệnh");
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (orders.length === 0) return;
+    const allSelected = orders.every((order) => selectedIds.has(order._id));
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(orders.map((order) => order._id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (
+      !confirm(`Bạn có chắc muốn xóa ${selectedIds.size} lệnh đã chọn?`)
+    ) {
+      return;
+    }
+
+    try {
+      const { data } = await axiosClient.delete("/long-term-orders", {
+        data: { ids: Array.from(selectedIds) },
+      });
+      toast.success(data.message || "Xóa lệnh thành công");
+      setSelectedIds(new Set());
       fetchOrders();
     } catch (error: unknown) {
       toast.error(getErrorMessage(error) || "Lỗi khi xóa lệnh");
@@ -243,6 +295,9 @@ export default function LongTermOrdersPage() {
     totalSellQuantity: sellOrders.reduce((acc, o) => acc + o.quantity, 0),
     totalProfit: sellOrders.reduce((acc, o) => acc + o.profit, 0),
   };
+
+  const allSelected =
+    orders.length > 0 && orders.every((order) => selectedIds.has(order._id));
 
   // Calculate remaining quantity for each order
   const calculateRemainingQuantity = (order: LongTermOrder) => {
@@ -599,11 +654,24 @@ export default function LongTermOrdersPage() {
 
       {/* Table */}
       <Card className="bg-slate-800/50 border-slate-700/50">
-        <CardHeader>
-          <CardTitle className="text-white">Danh sách lệnh dài hạn</CardTitle>
-          <CardDescription className="text-slate-400">
-            Tổng cộng {orders.length} lệnh giao dịch
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <div>
+            <CardTitle className="text-white">Danh sách lệnh dài hạn</CardTitle>
+            <CardDescription className="text-slate-400">
+              Tổng cộng {orders.length} lệnh giao dịch
+              {selectedIds.size > 0 && ` · Đã chọn ${selectedIds.size}`}
+            </CardDescription>
+          </div>
+          {selectedIds.size > 0 && (
+            <Button
+              variant="destructive"
+              onClick={handleBulkDelete}
+              className="shrink-0"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Xóa đã chọn ({selectedIds.size})
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -615,6 +683,16 @@ export default function LongTermOrdersPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-900/50 hover:bg-slate-900/50">
+                    <TableHead className="w-10">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={toggleSelectAll}
+                        disabled={orders.length === 0}
+                        aria-label="Chọn tất cả"
+                        className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-slate-900 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                      />
+                    </TableHead>
                     <TableHead className="text-slate-300 font-semibold">
                       Ngày
                     </TableHead>
@@ -660,7 +738,7 @@ export default function LongTermOrdersPage() {
                   {orders.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={12}
+                        colSpan={14}
                         className="text-center text-slate-500 py-8"
                       >
                         Chưa có lệnh giao dịch nào
@@ -672,8 +750,19 @@ export default function LongTermOrdersPage() {
                       return (
                         <TableRow
                           key={order._id}
-                          className="border-slate-700 hover:bg-slate-700/30"
+                          className={`border-slate-700 hover:bg-slate-700/30 ${
+                            selectedIds.has(order._id) ? "bg-cyan-500/5" : ""
+                          }`}
                         >
+                          <TableCell>
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(order._id)}
+                              onChange={() => toggleSelect(order._id)}
+                              aria-label={`Chọn lệnh ${order.stockCode}`}
+                              className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-slate-900 cursor-pointer"
+                            />
+                          </TableCell>
                           <TableCell className="text-slate-300">
                             {formatDate(order.tradeDate)}
                           </TableCell>

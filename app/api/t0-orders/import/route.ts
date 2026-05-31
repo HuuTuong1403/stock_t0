@@ -3,6 +3,10 @@ import dbConnect from "@/lib/mongodb";
 import { T0Order, StockCompany } from "@/lib/models";
 import * as XLSX from "xlsx";
 import { requireAuth } from "@/lib/services/auth";
+import {
+  parseImportTradeDate,
+  sortImportRowsByTradeDate,
+} from "@/lib/utils/sort-import-rows";
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,12 +53,12 @@ export async function POST(request: NextRequest) {
       errors: [] as string[],
     };
 
-    // Process each row
-    for (let i = 0; i < data.length; i++) {
-      try {
-        const row = data[i] as Record<string, unknown>;
+    const sortedRows = sortImportRowsByTradeDate(
+      data as Record<string, unknown>[]
+    );
 
-        // Map Excel columns to model fields
+    for (const { row, excelRow } of sortedRows) {
+      try {
         const tradeDateStr = String(row["Ngày giao dịch"] || "");
         const stockCode = String(row["Mã CP"] || "")
           .toUpperCase()
@@ -74,15 +78,14 @@ export async function POST(request: NextRequest) {
           !sellPrice
         ) {
           results.failed++;
-          results.errors.push(`Dòng ${i + 2}: Thiếu thông tin bắt buộc`);
+          results.errors.push(`Dòng ${excelRow}: Thiếu thông tin bắt buộc`);
           continue;
         }
 
-        // Parse date
-        const tradeDate = new Date(tradeDateStr);
-        if (isNaN(tradeDate.getTime())) {
+        const tradeDate = parseImportTradeDate(row["Ngày giao dịch"]);
+        if (!tradeDate) {
           results.failed++;
-          results.errors.push(`Dòng ${i + 2}: Ngày giao dịch không hợp lệ`);
+          results.errors.push(`Dòng ${excelRow}: Ngày giao dịch không hợp lệ`);
           continue;
         }
 
@@ -98,9 +101,7 @@ export async function POST(request: NextRequest) {
         if (!company) {
           results.failed++;
           results.errors.push(
-            `Dòng ${
-              i + 2
-            }: Không tìm thấy công ty chứng khoán "${companyName}" (nhập ID hoặc tên công ty)`
+            `Dòng ${excelRow}: Không tìm thấy công ty chứng khoán "${companyName}" (nhập ID hoặc tên công ty)`
           );
           continue;
         }
@@ -122,7 +123,7 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         results.failed++;
         results.errors.push(
-          `Dòng ${i + 2}: ${
+          `Dòng ${excelRow}: ${
             error instanceof Error ? error.message : "Lỗi không xác định"
           }`
         );

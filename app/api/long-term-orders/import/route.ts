@@ -3,7 +3,12 @@ import dbConnect from "@/lib/mongodb";
 import { LongTermOrder, StockCompany } from "@/lib/models";
 import * as XLSX from "xlsx";
 import { requireAuth } from "@/lib/services/auth";
-
+import {
+  isBuyOrderType,
+  parseImportTradeDate,
+  sortImportRowsByTradeDate,
+  type ImportRow,
+} from "@/lib/utils/sort-import-rows";
 export async function POST(request: NextRequest) {
   try {
     await dbConnect();
@@ -49,12 +54,19 @@ export async function POST(request: NextRequest) {
       errors: [] as string[],
     };
 
-    // Process each row
-    for (let i = 0; i < data.length; i++) {
-      try {
-        const row = data[i] as Record<string, unknown>;
+    const compareSameDate = (a: ImportRow, b: ImportRow) => {
+      const buyA = isBuyOrderType(a.row["Loại"]) ? 0 : 1;
+      const buyB = isBuyOrderType(b.row["Loại"]) ? 0 : 1;
+      return buyA - buyB;
+    };
 
-        // Map Excel columns to model fields
+    const sortedRows = sortImportRowsByTradeDate(
+      data as Record<string, unknown>[],
+      compareSameDate
+    );
+
+    for (const { row, excelRow } of sortedRows) {
+      try {
         const tradeDateStr = String(row["Ngày giao dịch"] || "");
         const stockCode = String(row["Mã CP"] || "")
           .toUpperCase()
@@ -76,7 +88,7 @@ export async function POST(request: NextRequest) {
           !price
         ) {
           results.failed++;
-          results.errors.push(`Dòng ${i + 2}: Thiếu thông tin bắt buộc`);
+          results.errors.push(`Dòng ${excelRow}: Thiếu thông tin bắt buộc`);
           continue;
         }
 
@@ -89,23 +101,19 @@ export async function POST(request: NextRequest) {
         ) {
           results.failed++;
           results.errors.push(
-            `Dòng ${
-              i + 2
-            }: Loại lệnh không hợp lệ (phải là BUY/MUA hoặc SELL/BÁN)`
+            `Dòng ${excelRow}: Loại lệnh không hợp lệ (phải là BUY/MUA hoặc SELL/BÁN)`
           );
           continue;
         }
 
         const type = typeStr === "BUY" || typeStr === "MUA" ? "BUY" : "SELL";
 
-        // Parse date
-        const tradeDate = new Date(tradeDateStr);
-        if (isNaN(tradeDate.getTime())) {
+        const tradeDate = parseImportTradeDate(row["Ngày giao dịch"]);
+        if (!tradeDate) {
           results.failed++;
-          results.errors.push(`Dòng ${i + 2}: Ngày giao dịch không hợp lệ`);
+          results.errors.push(`Dòng ${excelRow}: Ngày giao dịch không hợp lệ`);
           continue;
         }
-
         // Find company - try by ID first, then by name
         let company = companies.find((c) => c._id.toString() === companyName);
         if (!company) {
@@ -118,11 +126,8 @@ export async function POST(request: NextRequest) {
         if (!company) {
           results.failed++;
           results.errors.push(
-            `Dòng ${
-              i + 2
-            }: Không tìm thấy công ty chứng khoán "${companyName}" (nhập ID hoặc tên công ty)`
-          );
-          continue;
+            `Dòng ${excelRow}: Không tìm thấy công ty chứng khoán "${companyName}" (nhập ID hoặc tên công ty)`
+          );          continue;
         }
 
         // Create order
@@ -144,11 +149,10 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         results.failed++;
         results.errors.push(
-          `Dòng ${i + 2}: ${
+          `Dòng ${excelRow}: ${
             error instanceof Error ? error.message : "Lỗi không xác định"
           }`
-        );
-      }
+        );      }
     }
 
     return NextResponse.json({

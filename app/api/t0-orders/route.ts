@@ -82,3 +82,39 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Lỗi khi tạo lệnh T0" }, { status: 500 });
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    await dbConnect();
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const { user } = auth;
+    const body = await request.json();
+    const ids: string[] = body?.ids;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json(
+        { error: "Danh sách ID không hợp lệ" },
+        { status: 400 }
+      );
+    }
+
+    const result = await T0Order.deleteMany({
+      _id: { $in: ids },
+      userId: user._id,
+    });
+
+    return NextResponse.json({
+      message: `Đã xóa ${result.deletedCount} lệnh T0`,
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    console.error("Error bulk deleting T0 orders:", error);
+    return NextResponse.json(
+      { error: "Lỗi khi xóa lệnh T0" },
+      { status: 500 }
+    );
+  }
+}

@@ -29,9 +29,14 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   )
 }
 
-function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
+function TableBody({
+  className,
+  ref,
+  ...props
+}: React.ComponentProps<"tbody"> & { ref?: React.Ref<HTMLTableSectionElement> }) {
   return (
     <tbody
+      ref={ref}
       data-slot="table-body"
       className={cn("[&_tr:last-child]:border-0", className)}
       {...props}

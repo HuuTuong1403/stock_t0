@@ -3,6 +3,8 @@ import dbConnect from "@/lib/mongodb";
 import { Dividend, LongTermOrder } from "@/lib/models";
 import { requireAuth } from "@/lib/services/auth";
 
+const CASH_DIVIDEND_PAR_VALUE = 10_000;
+
 /**
  * Adjust stock orders based on dividend (both STOCK and CASH)
  *
@@ -13,8 +15,8 @@ import { requireAuth } from "@/lib/services/auth";
  *
  * CASH DIVIDEND (cổ tức tiền mặt):
  *   - Số lượng cổ phiếu không đổi
- *   - Giá giảm theo % cổ tức (ex-dividend effect)
- *   - VD: 10% cash dividend → 100 cổ phiếu @ 50k → 100 cổ phiếu @ 45k
+ *   - Giá giảm theo mệnh giá 10.000đ × tỷ lệ %
+ *   - VD: 5% cash dividend → giá giảm 500đ (10.000 × 5%)
  *
  * POST /api/dividends/adjust-orders
  * Body: { dividendId: string }
@@ -135,18 +137,14 @@ export async function POST(request: NextRequest) {
         adjustedCount++;
       }
     } else {
-      // CASH DIVIDEND: Giá giảm, số lượng không đổi
-      // Giá giảm theo % cổ tức: newPrice = oldPrice * (1 - dividend.value/100)
-      const priceAdjustmentRatio = 1 - dividend.value / 100; // e.g., 10% -> 0.9
+      // CASH DIVIDEND: Giá giảm cố định theo mệnh giá 10.000đ, số lượng không đổi
+      const priceReduction = Math.round(
+        (CASH_DIVIDEND_PAR_VALUE * dividend.value) / 100
+      );
 
       for (const order of longTermOrders) {
-        // Adjust price down by dividend percentage
-        order.price = order.price * priceAdjustmentRatio;
+        order.price = Math.max(0, order.price - priceReduction);
 
-        // Quantity remains the same for cash dividends
-        // costBasis remains the same (no quantity change)
-
-        // Recalculate will happen in pre-save middleware
         await order.save();
         adjustedCount++;
       }
@@ -167,7 +165,7 @@ export async function POST(request: NextRequest) {
       adjustmentType:
         dividend.type === "STOCK"
           ? "Tăng số lượng, giảm giá (stock dividend)"
-          : "Giảm giá, số lượng không đổi (cash dividend)",
+          : `Giảm giá ${Math.round((CASH_DIVIDEND_PAR_VALUE * dividend.value) / 100)}đ (mệnh giá 10.000đ × ${dividend.value}%), số lượng không đổi (cash dividend)`,
       note: "Lệnh T0 (giao dịch trong ngày) không bị điều chỉnh vì đã đóng vị thế",
     });
   } catch (error) {

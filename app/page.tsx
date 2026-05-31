@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Card,
   CardContent,
@@ -13,7 +13,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
@@ -33,6 +32,10 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import axiosClient from "@/lib/axiosClient";
 import { getErrorMessage } from "@/lib/utils/error";
+import { MonthlyProfitChart } from "@/components/MonthlyProfitChart";
+import { SortableTableHead } from "@/components/SortableTableHead";
+import { FlipTableBody } from "@/components/FlipTableBody";
+import { sortTableData, useTableSort } from "@/lib/hooks/use-table-sort";
 
 interface Stats {
   counts: {
@@ -76,12 +79,20 @@ interface Stats {
     totalProfit: number;
     orderCount: number;
   }>;
+  monthlyProfit: Array<{
+    year: number;
+    month: number;
+    t0Profit: number;
+    longTermProfit: number;
+    totalProfit: number;
+  }>;
   t0StatsByStock: Array<{
     stockCode: string;
     company: string;
     companyName: string;
     marketPrice: number;
     orderCount: number;
+    totalQuantity: number;
     totalProfitBeforeFees: number;
     totalProfitAfterFees: number;
     totalBuyValue: number;
@@ -106,6 +117,18 @@ interface Stats {
     stockDividends: number;
     cashDividends: number;
     totalValue: number;
+  }>;
+  combinedStatsByStock: Array<{
+    stockCode: string;
+    buyQuantity: number;
+    sellQuantity: number;
+    remainingQuantity: number;
+    buyValue: number;
+    sellValue: number;
+    remainingValue: number;
+    t0Profit: number;
+    longTermProfit: number;
+    totalProfit: number;
   }>;
 }
 
@@ -140,10 +163,20 @@ const quickLinks = [
   },
 ];
 
+function recordSortValue<T extends object>(item: T, key: string) {
+  return (item as Record<string, unknown>)[key];
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  console.log("Test");
+
+  const recentOrdersSort = useTableSort();
+  const combinedSort = useTableSort();
+  const portfolioSort = useTableSort();
+  const t0StatsSort = useTableSort();
+  const longTermStatsSort = useTableSort();
+  const dividendStatsSort = useTableSort();
 
   useEffect(() => {
     fetchStats();
@@ -188,14 +221,6 @@ export default function DashboardPage() {
     return colors[color] || colors.emerald;
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-400"></div>
-      </div>
-    );
-  }
-
   const totalProfit =
     (stats?.t0Summary.totalProfitAfterFees || 0) +
     (stats?.longTermSummary.totalProfit || 0);
@@ -203,14 +228,174 @@ export default function DashboardPage() {
     stats?.longTermPortfolio.reduce(
       (acc, stock) =>
         acc + (stock.marketPrice - stock.averageCostBasis) * stock.quantity,
-      0
+      0,
     ) || 0;
   const totalProfitLongTermCurrent =
     stats?.longTermPortfolio.reduce(
       (acc, stock) =>
         acc + (stock.marketPrice - stock.currentCostBasis) * stock.quantity,
-      0
+      0,
     ) || 0;
+
+  const combinedTotals = stats?.combinedStatsByStock.reduce(
+    (acc, stock) => ({
+      buyQuantity: acc.buyQuantity + stock.buyQuantity,
+      sellQuantity: acc.sellQuantity + stock.sellQuantity,
+      remainingQuantity: acc.remainingQuantity + stock.remainingQuantity,
+      buyValue: acc.buyValue + stock.buyValue,
+      sellValue: acc.sellValue + stock.sellValue,
+      remainingValue: acc.remainingValue + stock.remainingValue,
+      t0Profit: acc.t0Profit + stock.t0Profit,
+      longTermProfit: acc.longTermProfit + stock.longTermProfit,
+      totalProfit: acc.totalProfit + stock.totalProfit,
+    }),
+    {
+      buyQuantity: 0,
+      sellQuantity: 0,
+      remainingQuantity: 0,
+      buyValue: 0,
+      sellValue: 0,
+      remainingValue: 0,
+      t0Profit: 0,
+      longTermProfit: 0,
+      totalProfit: 0,
+    },
+  );
+
+  const sortedRecentT0Orders = useMemo(
+    () =>
+      sortTableData(
+        stats?.recentT0Orders ?? [],
+        recentOrdersSort.sortKey,
+        recentOrdersSort.sortDirection,
+        recordSortValue,
+      ),
+    [
+      stats?.recentT0Orders,
+      recentOrdersSort.sortKey,
+      recentOrdersSort.sortDirection,
+    ],
+  );
+
+  const sortedCombinedStats = useMemo(
+    () =>
+      sortTableData(
+        stats?.combinedStatsByStock ?? [],
+        combinedSort.sortKey,
+        combinedSort.sortDirection,
+        recordSortValue,
+      ),
+    [
+      stats?.combinedStatsByStock,
+      combinedSort.sortKey,
+      combinedSort.sortDirection,
+    ],
+  );
+
+  const portfolioItems = useMemo(
+    () =>
+      stats?.longTermPortfolio.filter(
+        (stock) => stock.quantity - stock.quantitySell > 0,
+      ) ?? [],
+    [stats?.longTermPortfolio],
+  );
+
+  const sortedPortfolio = useMemo(
+    () =>
+      sortTableData(
+        portfolioItems,
+        portfolioSort.sortKey,
+        portfolioSort.sortDirection,
+        (item, key) => {
+          const held = item.quantity - item.quantitySell;
+          switch (key) {
+            case "stockCode":
+              return item.stockCode;
+            case "companyName":
+              return item.companyName;
+            case "heldQuantity":
+              return held;
+            case "averageCostBasis":
+              return item.averageCostBasis;
+            case "currentCostBasis":
+              return item.currentCostBasis;
+            case "marketPrice":
+              return item.marketPrice;
+            case "profitByAvg":
+              return (item.marketPrice - item.averageCostBasis) * held;
+            case "averagePercentage":
+              return item.averageCostBasis > 0
+                ? ((item.marketPrice - item.averageCostBasis) /
+                    item.averageCostBasis) *
+                    100
+                : 0;
+            case "profitByCurrent":
+              return item.currentCostBasis > 0
+                ? (item.marketPrice - item.currentCostBasis) * held
+                : 0;
+            case "currentPercentage":
+              return item.currentCostBasis > 0
+                ? ((item.marketPrice - item.currentCostBasis) /
+                    item.currentCostBasis) *
+                    100
+                : 0;
+            default:
+              return null;
+          }
+        },
+      ),
+    [portfolioItems, portfolioSort.sortKey, portfolioSort.sortDirection],
+  );
+
+  const sortedT0Stats = useMemo(
+    () =>
+      sortTableData(
+        stats?.t0StatsByStock ?? [],
+        t0StatsSort.sortKey,
+        t0StatsSort.sortDirection,
+        recordSortValue,
+      ),
+    [stats?.t0StatsByStock, t0StatsSort.sortKey, t0StatsSort.sortDirection],
+  );
+
+  const sortedLongTermStats = useMemo(
+    () =>
+      sortTableData(
+        stats?.longTermStatsByStock ?? [],
+        longTermStatsSort.sortKey,
+        longTermStatsSort.sortDirection,
+        recordSortValue,
+      ),
+    [
+      stats?.longTermStatsByStock,
+      longTermStatsSort.sortKey,
+      longTermStatsSort.sortDirection,
+    ],
+  );
+
+  const sortedDividendStats = useMemo(
+    () =>
+      sortTableData(
+        stats?.dividendStatsByStock ?? [],
+        dividendStatsSort.sortKey,
+        dividendStatsSort.sortDirection,
+        (item, key) =>
+          key === "stockCode" ? item._id : recordSortValue(item, key),
+      ),
+    [
+      stats?.dividendStatsByStock,
+      dividendStatsSort.sortKey,
+      dividendStatsSort.sortDirection,
+    ],
+  );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-400"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -427,20 +612,47 @@ export default function DashboardPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-900/50 hover:bg-slate-900/50">
-                      <TableHead className="text-slate-400">Ngày</TableHead>
-                      <TableHead className="text-slate-400">Mã CP</TableHead>
-                      <TableHead className="text-slate-400 text-right">
-                        SL
-                      </TableHead>
-                      <TableHead className="text-slate-400 text-right">
-                        Lợi nhuận
-                      </TableHead>
+                      <SortableTableHead
+                        label="Ngày"
+                        sortKey="tradeDate"
+                        activeKey={recentOrdersSort.sortKey}
+                        direction={recentOrdersSort.sortDirection}
+                        onSort={recentOrdersSort.toggleSort}
+                        className="text-slate-400"
+                      />
+                      <SortableTableHead
+                        label="Mã CP"
+                        sortKey="stockCode"
+                        activeKey={recentOrdersSort.sortKey}
+                        direction={recentOrdersSort.sortDirection}
+                        onSort={recentOrdersSort.toggleSort}
+                        className="text-slate-400"
+                      />
+                      <SortableTableHead
+                        label="SL"
+                        sortKey="quantity"
+                        activeKey={recentOrdersSort.sortKey}
+                        direction={recentOrdersSort.sortDirection}
+                        onSort={recentOrdersSort.toggleSort}
+                        align="right"
+                        className="text-slate-400"
+                      />
+                      <SortableTableHead
+                        label="Lợi nhuận"
+                        sortKey="profitAfterFees"
+                        activeKey={recentOrdersSort.sortKey}
+                        direction={recentOrdersSort.sortDirection}
+                        onSort={recentOrdersSort.toggleSort}
+                        align="right"
+                        className="text-slate-400"
+                      />
                     </TableRow>
                   </TableHeader>
-                  <TableBody>
-                    {stats.recentT0Orders.map((order) => (
+                  <FlipTableBody flipKey={recentOrdersSort.flipKey}>
+                    {sortedRecentT0Orders.map((order) => (
                       <TableRow
                         key={order._id}
+                        data-flip-id={order._id}
                         className="border-slate-700 hover:bg-slate-700/30"
                       >
                         <TableCell className="text-slate-300 text-sm">
@@ -469,7 +681,7 @@ export default function DashboardPage() {
                         </TableCell>
                       </TableRow>
                     ))}
-                  </TableBody>
+                  </FlipTableBody>
                 </Table>
               </div>
             ) : (
@@ -481,53 +693,264 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Monthly Profit */}
-      {stats?.monthlyT0Profit && stats.monthlyT0Profit.length > 0 && (
+      {/* Monthly Profit Chart */}
+      {stats?.monthlyProfit && stats.monthlyProfit.length > 0 && (
         <Card className="bg-slate-800/50 border-slate-700/50">
           <CardHeader>
             <CardTitle className="text-white">
-              Lợi nhuận T0 theo tháng
+              Lãi/lỗ theo tháng (T0 + Dài hạn)
             </CardTitle>
             <CardDescription className="text-slate-400">
-              6 tháng gần nhất
+              6 tháng gần nhất — vàng: T0, xanh dương: dài hạn
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              {stats.monthlyT0Profit.map((month) => {
-                const monthName = new Date(
-                  month._id.year,
-                  month._id.month - 1
-                ).toLocaleDateString("vi-VN", {
-                  month: "short",
-                  year: "2-digit",
-                });
-                return (
-                  <div
-                    key={`${month._id.year}-${month._id.month}`}
-                    className={`p-4 rounded-lg border ${
-                      month.totalProfit >= 0
-                        ? "border-emerald-500/30 bg-emerald-500/10"
-                        : "border-red-500/30 bg-red-500/10"
-                    }`}
-                  >
-                    <p className="text-slate-400 text-sm">{monthName}</p>
-                    <p
-                      className={`text-lg font-bold mt-1 ${
-                        month.totalProfit >= 0
-                          ? "text-emerald-400"
-                          : "text-red-400"
-                      }`}
+            <MonthlyProfitChart data={stats.monthlyProfit} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Combined Stats by Stock */}
+      {stats?.combinedStatsByStock && stats.combinedStatsByStock.length > 0 && (
+        <Card className="bg-slate-800/50 border-slate-700/50">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-emerald-400" />
+              Tổng hợp lãi/lỗ theo cổ phiếu
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              Gộp lệnh T0 và dài hạn theo từng mã cổ phiếu
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-lg border border-slate-700 overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-900/50 hover:bg-slate-900/50">
+                    <SortableTableHead
+                      label="Mã CP"
+                      sortKey="stockCode"
+                      activeKey={combinedSort.sortKey}
+                      direction={combinedSort.sortDirection}
+                      onSort={combinedSort.toggleSort}
+                      className="text-slate-300 font-semibold"
+                    />
+                    <SortableTableHead
+                      label="SL mua"
+                      sortKey="buyQuantity"
+                      activeKey={combinedSort.sortKey}
+                      direction={combinedSort.sortDirection}
+                      onSort={combinedSort.toggleSort}
+                      align="right"
+                      className="text-slate-300 font-semibold"
+                    />
+                    <SortableTableHead
+                      label="SL bán"
+                      sortKey="sellQuantity"
+                      activeKey={combinedSort.sortKey}
+                      direction={combinedSort.sortDirection}
+                      onSort={combinedSort.toggleSort}
+                      align="right"
+                      className="text-slate-300 font-semibold"
+                    />
+                    <SortableTableHead
+                      label="SL còn lại"
+                      sortKey="remainingQuantity"
+                      activeKey={combinedSort.sortKey}
+                      direction={combinedSort.sortDirection}
+                      onSort={combinedSort.toggleSort}
+                      align="right"
+                      className="text-slate-300 font-semibold"
+                    />
+                    <SortableTableHead
+                      label="Giá trị mua"
+                      sortKey="buyValue"
+                      activeKey={combinedSort.sortKey}
+                      direction={combinedSort.sortDirection}
+                      onSort={combinedSort.toggleSort}
+                      align="right"
+                      className="text-slate-300 font-semibold"
+                    />
+                    <SortableTableHead
+                      label="Giá trị bán"
+                      sortKey="sellValue"
+                      activeKey={combinedSort.sortKey}
+                      direction={combinedSort.sortDirection}
+                      onSort={combinedSort.toggleSort}
+                      align="right"
+                      className="text-slate-300 font-semibold"
+                    />
+                    <SortableTableHead
+                      label="Giá trị còn lại"
+                      sortKey="remainingValue"
+                      activeKey={combinedSort.sortKey}
+                      direction={combinedSort.sortDirection}
+                      onSort={combinedSort.toggleSort}
+                      align="right"
+                      className="text-slate-300 font-semibold"
+                    />
+                    <SortableTableHead
+                      label="Lãi/lỗ T0"
+                      sortKey="t0Profit"
+                      activeKey={combinedSort.sortKey}
+                      direction={combinedSort.sortDirection}
+                      onSort={combinedSort.toggleSort}
+                      align="right"
+                      className="text-slate-300 font-semibold"
+                    />
+                    <SortableTableHead
+                      label="Lãi/lỗ dài hạn"
+                      sortKey="longTermProfit"
+                      activeKey={combinedSort.sortKey}
+                      direction={combinedSort.sortDirection}
+                      onSort={combinedSort.toggleSort}
+                      align="right"
+                      className="text-slate-300 font-semibold"
+                    />
+                    <SortableTableHead
+                      label="Tổng lãi/lỗ"
+                      sortKey="totalProfit"
+                      activeKey={combinedSort.sortKey}
+                      direction={combinedSort.sortDirection}
+                      onSort={combinedSort.toggleSort}
+                      align="right"
+                      className="text-slate-300 font-semibold"
+                    />
+                  </TableRow>
+                </TableHeader>
+                <FlipTableBody flipKey={combinedSort.flipKey}>
+                  {sortedCombinedStats.map((stock) => (
+                    <TableRow
+                      key={stock.stockCode}
+                      data-flip-id={stock.stockCode}
+                      className="border-slate-700 hover:bg-slate-700/30"
                     >
-                      {month.totalProfit >= 0 ? "+" : ""}
-                      {formatCurrency(month.totalProfit)}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {month.orderCount} lệnh
-                    </p>
-                  </div>
-                );
-              })}
+                      <TableCell>
+                        <span className="font-mono font-semibold text-emerald-400">
+                          {stock.stockCode}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right text-slate-200">
+                        {formatCurrency(stock.buyQuantity)}
+                      </TableCell>
+                      <TableCell className="text-right text-slate-200">
+                        {formatCurrency(stock.sellQuantity)}
+                      </TableCell>
+                      <TableCell className="text-right text-slate-200">
+                        {stock.remainingQuantity > 0
+                          ? formatCurrency(stock.remainingQuantity)
+                          : "-"}
+                      </TableCell>
+                      <TableCell className="text-right text-red-400">
+                        {formatCurrency(stock.buyValue)}
+                      </TableCell>
+                      <TableCell className="text-right text-emerald-400">
+                        {formatCurrency(stock.sellValue)}
+                      </TableCell>
+                      <TableCell className="text-right text-blue-400">
+                        {stock.remainingValue > 0
+                          ? formatCurrency(stock.remainingValue)
+                          : "-"}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          "text-right font-semibold",
+                          stock.t0Profit >= 0
+                            ? "text-yellow-400"
+                            : "text-red-400",
+                        )}
+                      >
+                        {stock.t0Profit >= 0 ? "+" : ""}
+                        {formatCurrency(stock.t0Profit)}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          "text-right font-semibold",
+                          stock.longTermProfit >= 0
+                            ? "text-cyan-400"
+                            : "text-red-400",
+                        )}
+                      >
+                        {stock.longTermProfit >= 0 ? "+" : ""}
+                        {formatCurrency(stock.longTermProfit)}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          "text-right font-semibold",
+                          stock.totalProfit >= 0
+                            ? "text-emerald-400"
+                            : "text-red-400",
+                        )}
+                      >
+                        {stock.totalProfit >= 0 ? "+" : ""}
+                        {formatCurrency(stock.totalProfit)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </FlipTableBody>
+                <TableBody>
+                  <TableRow className="border-slate-700 bg-slate-900/30 hover:bg-slate-900/30">
+                    <TableCell
+                      colSpan={1}
+                      className="text-right font-bold text-slate-300"
+                    >
+                      Tổng cộng
+                    </TableCell>
+                    <TableCell className="text-right font-bold text-slate-200">
+                      {formatCurrency(combinedTotals?.buyQuantity || 0)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold text-slate-200">
+                      {formatCurrency(combinedTotals?.sellQuantity || 0)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold text-slate-200">
+                      {(combinedTotals?.remainingQuantity || 0) > 0
+                        ? formatCurrency(combinedTotals?.remainingQuantity || 0)
+                        : "-"}
+                    </TableCell>
+                    <TableCell className="text-right font-bold text-red-400">
+                      {formatCurrency(combinedTotals?.buyValue || 0)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold text-emerald-400">
+                      {formatCurrency(combinedTotals?.sellValue || 0)}
+                    </TableCell>
+                    <TableCell className="text-right font-bold text-blue-400">
+                      {(combinedTotals?.remainingValue || 0) > 0
+                        ? formatCurrency(combinedTotals?.remainingValue || 0)
+                        : "-"}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right font-bold",
+                        (combinedTotals?.t0Profit || 0) >= 0
+                          ? "text-yellow-400"
+                          : "text-red-400",
+                      )}
+                    >
+                      {formatCurrency(combinedTotals?.t0Profit || 0)}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right font-bold",
+                        (combinedTotals?.longTermProfit || 0) >= 0
+                          ? "text-cyan-400"
+                          : "text-red-400",
+                      )}
+                    >
+                      {formatCurrency(combinedTotals?.longTermProfit || 0)}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right font-bold",
+                        (combinedTotals?.totalProfit || 0) >= 0
+                          ? "text-emerald-400"
+                          : "text-red-400",
+                      )}
+                    >
+                      {formatCurrency(combinedTotals?.totalProfit || 0)}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
             </div>
           </CardContent>
         </Card>
@@ -545,45 +968,105 @@ export default function DashboardPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {stats?.longTermPortfolio && stats.longTermPortfolio.length > 0 ? (
+          {portfolioItems.length > 0 ? (
             <div className="rounded-lg border border-slate-700 overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-900/50 hover:bg-slate-900/50">
-                    <TableHead className="text-slate-300 font-semibold">
-                      Mã CP
-                    </TableHead>
-                    <TableHead className="text-slate-300 font-semibold">
-                      Công ty
-                    </TableHead>
-                    <TableHead className="text-slate-300 font-semibold text-right">
-                      Số lượng
-                    </TableHead>
-                    <TableHead className="text-slate-300 font-semibold text-right">
-                      Giá vốn TB
-                    </TableHead>
-                    <TableHead className="text-slate-300 font-semibold text-right">
-                      Giá vốn HT
-                    </TableHead>
-                    <TableHead className="text-slate-300 font-semibold text-right">
-                      Giá TT
-                    </TableHead>
-                    <TableHead className="text-slate-300 font-semibold text-right">
-                      Lãi/Lỗ (TB)
-                    </TableHead>
-                    <TableHead className="text-slate-300 font-semibold text-right">
-                      % thay đổi (TB)
-                    </TableHead>
-                    <TableHead className="text-slate-300 font-semibold text-right">
-                      Lãi/Lỗ (HT)
-                    </TableHead>
-                    <TableHead className="text-slate-300 font-semibold text-right">
-                      % thay đổi (HT)
-                    </TableHead>
+                    <SortableTableHead
+                      label="Mã CP"
+                      sortKey="stockCode"
+                      activeKey={portfolioSort.sortKey}
+                      direction={portfolioSort.sortDirection}
+                      onSort={portfolioSort.toggleSort}
+                      className="text-slate-300 font-semibold"
+                    />
+                    <SortableTableHead
+                      label="Công ty"
+                      sortKey="companyName"
+                      activeKey={portfolioSort.sortKey}
+                      direction={portfolioSort.sortDirection}
+                      onSort={portfolioSort.toggleSort}
+                      className="text-slate-300 font-semibold"
+                    />
+                    <SortableTableHead
+                      label="Số lượng"
+                      sortKey="heldQuantity"
+                      activeKey={portfolioSort.sortKey}
+                      direction={portfolioSort.sortDirection}
+                      onSort={portfolioSort.toggleSort}
+                      align="right"
+                      className="text-slate-300 font-semibold"
+                    />
+                    <SortableTableHead
+                      label="Giá vốn TB"
+                      sortKey="averageCostBasis"
+                      activeKey={portfolioSort.sortKey}
+                      direction={portfolioSort.sortDirection}
+                      onSort={portfolioSort.toggleSort}
+                      align="right"
+                      className="text-slate-300 font-semibold"
+                    />
+                    <SortableTableHead
+                      label="Giá vốn HT"
+                      sortKey="currentCostBasis"
+                      activeKey={portfolioSort.sortKey}
+                      direction={portfolioSort.sortDirection}
+                      onSort={portfolioSort.toggleSort}
+                      align="right"
+                      className="text-slate-300 font-semibold"
+                    />
+                    <SortableTableHead
+                      label="Giá TT"
+                      sortKey="marketPrice"
+                      activeKey={portfolioSort.sortKey}
+                      direction={portfolioSort.sortDirection}
+                      onSort={portfolioSort.toggleSort}
+                      align="right"
+                      className="text-slate-300 font-semibold"
+                    />
+                    <SortableTableHead
+                      label="Lãi/Lỗ (TB)"
+                      sortKey="profitByAvg"
+                      activeKey={portfolioSort.sortKey}
+                      direction={portfolioSort.sortDirection}
+                      onSort={portfolioSort.toggleSort}
+                      align="right"
+                      className="text-slate-300 font-semibold"
+                    />
+                    <SortableTableHead
+                      label="% thay đổi (TB)"
+                      sortKey="averagePercentage"
+                      activeKey={portfolioSort.sortKey}
+                      direction={portfolioSort.sortDirection}
+                      onSort={portfolioSort.toggleSort}
+                      align="right"
+                      className="text-slate-300 font-semibold"
+                    />
+                    <SortableTableHead
+                      label="Lãi/Lỗ (HT)"
+                      sortKey="profitByCurrent"
+                      activeKey={portfolioSort.sortKey}
+                      direction={portfolioSort.sortDirection}
+                      onSort={portfolioSort.toggleSort}
+                      align="right"
+                      className="text-slate-300 font-semibold"
+                    />
+                    <SortableTableHead
+                      label="% thay đổi (HT)"
+                      sortKey="currentPercentage"
+                      activeKey={portfolioSort.sortKey}
+                      direction={portfolioSort.sortDirection}
+                      onSort={portfolioSort.toggleSort}
+                      align="right"
+                      className="text-slate-300 font-semibold"
+                    />
                   </TableRow>
                 </TableHeader>
-                <TableBody>
-                  {stats.longTermPortfolio.map((stock, index) => {
+                <FlipTableBody flipKey={portfolioSort.flipKey}>
+                  {sortedPortfolio.map((stock) => {
+                    const held = stock.quantity - stock.quantitySell;
+                    const rowKey = `${stock.stockCode}-${stock.company}`;
                     const profitByAvg =
                       stock.marketPrice - stock.averageCostBasis;
 
@@ -591,19 +1074,23 @@ export default function DashboardPage() {
                       stock.currentCostBasis > 0
                         ? stock.marketPrice - stock.currentCostBasis
                         : null;
-                    // % thay đổi tính theo giá vốn hiện tại (ưu tiên), nếu không có thì tính theo giá vốn TB
                     const averagePercentage =
-                      ((stock.marketPrice - stock.averageCostBasis) /
-                        stock.averageCostBasis) *
-                      100;
+                      stock.averageCostBasis > 0
+                        ? ((stock.marketPrice - stock.averageCostBasis) /
+                            stock.averageCostBasis) *
+                          100
+                        : null;
                     const currentPercentage =
-                      ((stock.marketPrice - stock.currentCostBasis) /
-                        stock.currentCostBasis) *
-                      100;
+                      stock.currentCostBasis > 0
+                        ? ((stock.marketPrice - stock.currentCostBasis) /
+                            stock.currentCostBasis) *
+                          100
+                        : null;
 
                     return (
                       <TableRow
-                        key={`${stock.stockCode}-${stock.company}-${index}`}
+                        key={rowKey}
+                        data-flip-id={rowKey}
                         className="border-slate-700 hover:bg-slate-700/30"
                       >
                         <TableCell>
@@ -617,7 +1104,7 @@ export default function DashboardPage() {
                           </span>
                         </TableCell>
                         <TableCell className="text-right text-slate-200">
-                          {formatCurrency(stock.quantity - stock.quantitySell)}
+                          {formatCurrency(held)}
                         </TableCell>
                         <TableCell className="text-right text-slate-200">
                           {stock.averageCostBasis > 0
@@ -642,9 +1129,7 @@ export default function DashboardPage() {
                           }`}
                         >
                           {profitByAvg >= 0 ? "+" : ""}
-                          {formatCurrency(
-                            profitByAvg * (stock.quantity - stock.quantitySell)
-                          )}
+                          {formatCurrency(profitByAvg * held)}
                         </TableCell>
                         <TableCell
                           className={`text-right font-semibold ${
@@ -681,10 +1166,7 @@ export default function DashboardPage() {
                           {profitByCurrent !== null ? (
                             <>
                               {profitByCurrent >= 0 ? "+" : ""}
-                              {formatCurrency(
-                                profitByCurrent *
-                                  (stock.quantity - stock.quantitySell)
-                              )}
+                              {formatCurrency(profitByCurrent * held)}
                             </>
                           ) : (
                             "-"
@@ -717,6 +1199,8 @@ export default function DashboardPage() {
                       </TableRow>
                     );
                   })}
+                </FlipTableBody>
+                <TableBody>
                   <TableRow className="border-slate-700 hover:bg-slate-700/30">
                     <TableCell
                       colSpan={6}
@@ -729,7 +1213,7 @@ export default function DashboardPage() {
                         "text-right text-cyan-400 font-bold",
                         totalProfitLongTermAvg >= 0
                           ? "text-emerald-400"
-                          : "text-red-400"
+                          : "text-red-400",
                       )}
                     >
                       {formatCurrency(totalProfitLongTermAvg)}
@@ -740,7 +1224,7 @@ export default function DashboardPage() {
                         "text-right text-cyan-400 font-bold",
                         totalProfitLongTermCurrent >= 0
                           ? "text-emerald-400"
-                          : "text-red-400"
+                          : "text-red-400",
                       )}
                     >
                       {formatCurrency(totalProfitLongTermCurrent)}
@@ -817,72 +1301,116 @@ export default function DashboardPage() {
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-slate-900/50 hover:bg-slate-900/50">
-                          <TableHead className="text-slate-300 font-semibold">
-                            Mã CP
-                          </TableHead>
-                          <TableHead className="text-slate-300 font-semibold">
-                            Công ty
-                          </TableHead>
-                          <TableHead className="text-slate-300 font-semibold text-right">
-                            Giá TT
-                          </TableHead>
-                          <TableHead className="text-slate-300 font-semibold text-right">
-                            Số lệnh
-                          </TableHead>
-                          <TableHead className="text-slate-300 font-semibold text-right">
-                            GT Mua
-                          </TableHead>
-                          <TableHead className="text-slate-300 font-semibold text-right">
-                            GT Bán
-                          </TableHead>
-                          <TableHead className="text-slate-300 font-semibold text-right">
-                            LN sau phí
-                          </TableHead>
+                          <SortableTableHead
+                            label="Mã CP"
+                            sortKey="stockCode"
+                            activeKey={t0StatsSort.sortKey}
+                            direction={t0StatsSort.sortDirection}
+                            onSort={t0StatsSort.toggleSort}
+                            className="text-slate-300 font-semibold"
+                          />
+                          <SortableTableHead
+                            label="Công ty"
+                            sortKey="companyName"
+                            activeKey={t0StatsSort.sortKey}
+                            direction={t0StatsSort.sortDirection}
+                            onSort={t0StatsSort.toggleSort}
+                            className="text-slate-300 font-semibold"
+                          />
+                          <SortableTableHead
+                            label="Giá TT"
+                            sortKey="marketPrice"
+                            activeKey={t0StatsSort.sortKey}
+                            direction={t0StatsSort.sortDirection}
+                            onSort={t0StatsSort.toggleSort}
+                            align="right"
+                            className="text-slate-300 font-semibold"
+                          />
+                          <SortableTableHead
+                            label="Số lệnh"
+                            sortKey="orderCount"
+                            activeKey={t0StatsSort.sortKey}
+                            direction={t0StatsSort.sortDirection}
+                            onSort={t0StatsSort.toggleSort}
+                            align="right"
+                            className="text-slate-300 font-semibold"
+                          />
+                          <SortableTableHead
+                            label="GT Mua"
+                            sortKey="totalBuyValue"
+                            activeKey={t0StatsSort.sortKey}
+                            direction={t0StatsSort.sortDirection}
+                            onSort={t0StatsSort.toggleSort}
+                            align="right"
+                            className="text-slate-300 font-semibold"
+                          />
+                          <SortableTableHead
+                            label="GT Bán"
+                            sortKey="totalSellValue"
+                            activeKey={t0StatsSort.sortKey}
+                            direction={t0StatsSort.sortDirection}
+                            onSort={t0StatsSort.toggleSort}
+                            align="right"
+                            className="text-slate-300 font-semibold"
+                          />
+                          <SortableTableHead
+                            label="LN sau phí"
+                            sortKey="totalProfitAfterFees"
+                            activeKey={t0StatsSort.sortKey}
+                            direction={t0StatsSort.sortDirection}
+                            onSort={t0StatsSort.toggleSort}
+                            align="right"
+                            className="text-slate-300 font-semibold"
+                          />
                         </TableRow>
                       </TableHeader>
-                      <TableBody>
-                        {stats.t0StatsByStock.map((stock, index) => (
-                          <TableRow
-                            key={`${stock.stockCode}-${stock.company}-${index}`}
-                            className="border-slate-700 hover:bg-slate-700/30"
-                          >
-                            <TableCell>
-                              <span className="font-mono font-semibold text-yellow-400">
-                                {stock.stockCode}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-sm text-slate-400">
-                                {stock.companyName || "-"}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-right text-slate-200">
-                              {stock.marketPrice > 0
-                                ? formatCurrency(stock.marketPrice)
-                                : "-"}
-                            </TableCell>
-                            <TableCell className="text-right text-slate-200">
-                              {stock.orderCount}
-                            </TableCell>
-                            <TableCell className="text-right text-red-400">
-                              {formatCurrency(stock.totalBuyValue)}
-                            </TableCell>
-                            <TableCell className="text-right text-emerald-400">
-                              {formatCurrency(stock.totalSellValue)}
-                            </TableCell>
-                            <TableCell
-                              className={`text-right font-semibold ${
-                                stock.totalProfitAfterFees >= 0
-                                  ? "text-emerald-400"
-                                  : "text-red-400"
-                              }`}
+                      <FlipTableBody flipKey={t0StatsSort.flipKey}>
+                        {sortedT0Stats.map((stock) => {
+                          const rowKey = `${stock.stockCode}-${stock.company}`;
+                          return (
+                            <TableRow
+                              key={rowKey}
+                              data-flip-id={rowKey}
+                              className="border-slate-700 hover:bg-slate-700/30"
                             >
-                              {stock.totalProfitAfterFees >= 0 ? "+" : ""}
-                              {formatCurrency(stock.totalProfitAfterFees)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
+                              <TableCell>
+                                <span className="font-mono font-semibold text-yellow-400">
+                                  {stock.stockCode}
+                                </span>
+                              </TableCell>
+                              <TableCell>
+                                <span className="text-sm text-slate-400">
+                                  {stock.companyName || "-"}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right text-slate-200">
+                                {stock.marketPrice > 0
+                                  ? formatCurrency(stock.marketPrice)
+                                  : "-"}
+                              </TableCell>
+                              <TableCell className="text-right text-slate-200">
+                                {stock.orderCount}
+                              </TableCell>
+                              <TableCell className="text-right text-red-400">
+                                {formatCurrency(stock.totalBuyValue)}
+                              </TableCell>
+                              <TableCell className="text-right text-emerald-400">
+                                {formatCurrency(stock.totalSellValue)}
+                              </TableCell>
+                              <TableCell
+                                className={`text-right font-semibold ${
+                                  stock.totalProfitAfterFees >= 0
+                                    ? "text-emerald-400"
+                                    : "text-red-400"
+                                }`}
+                              >
+                                {stock.totalProfitAfterFees >= 0 ? "+" : ""}
+                                {formatCurrency(stock.totalProfitAfterFees)}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </FlipTableBody>
                     </Table>
                   </div>
                 ) : (
@@ -900,90 +1428,152 @@ export default function DashboardPage() {
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-slate-900/50 hover:bg-slate-900/50">
-                          <TableHead className="text-slate-300 font-semibold">
-                            Mã CP
-                          </TableHead>
-                          <TableHead className="text-slate-300 font-semibold">
-                            Công ty
-                          </TableHead>
-                          <TableHead className="text-slate-300 font-semibold text-right">
-                            Giá TT
-                          </TableHead>
-                          <TableHead className="text-slate-300 font-semibold text-right">
-                            Lệnh MUA
-                          </TableHead>
-                          <TableHead className="text-slate-300 font-semibold text-right">
-                            Lệnh BÁN
-                          </TableHead>
-                          <TableHead className="text-slate-300 font-semibold text-right">
-                            SL Mua
-                          </TableHead>
-                          <TableHead className="text-slate-300 font-semibold text-right">
-                            SL Bán
-                          </TableHead>
-                          <TableHead className="text-slate-300 font-semibold text-right">
-                            GT Mua
-                          </TableHead>
-                          <TableHead className="text-slate-300 font-semibold text-right">
-                            GT Bán
-                          </TableHead>
-                          <TableHead className="text-slate-300 font-semibold text-right">
-                            Lợi nhuận
-                          </TableHead>
+                          <SortableTableHead
+                            label="Mã CP"
+                            sortKey="stockCode"
+                            activeKey={longTermStatsSort.sortKey}
+                            direction={longTermStatsSort.sortDirection}
+                            onSort={longTermStatsSort.toggleSort}
+                            className="text-slate-300 font-semibold"
+                          />
+                          <SortableTableHead
+                            label="Công ty"
+                            sortKey="companyName"
+                            activeKey={longTermStatsSort.sortKey}
+                            direction={longTermStatsSort.sortDirection}
+                            onSort={longTermStatsSort.toggleSort}
+                            className="text-slate-300 font-semibold"
+                          />
+                          <SortableTableHead
+                            label="Giá TT"
+                            sortKey="marketPrice"
+                            activeKey={longTermStatsSort.sortKey}
+                            direction={longTermStatsSort.sortDirection}
+                            onSort={longTermStatsSort.toggleSort}
+                            align="right"
+                            className="text-slate-300 font-semibold"
+                          />
+                          <SortableTableHead
+                            label="Lệnh MUA"
+                            sortKey="buyOrders"
+                            activeKey={longTermStatsSort.sortKey}
+                            direction={longTermStatsSort.sortDirection}
+                            onSort={longTermStatsSort.toggleSort}
+                            align="right"
+                            className="text-slate-300 font-semibold"
+                          />
+                          <SortableTableHead
+                            label="Lệnh BÁN"
+                            sortKey="sellOrders"
+                            activeKey={longTermStatsSort.sortKey}
+                            direction={longTermStatsSort.sortDirection}
+                            onSort={longTermStatsSort.toggleSort}
+                            align="right"
+                            className="text-slate-300 font-semibold"
+                          />
+                          <SortableTableHead
+                            label="SL Mua"
+                            sortKey="totalBuyQuantity"
+                            activeKey={longTermStatsSort.sortKey}
+                            direction={longTermStatsSort.sortDirection}
+                            onSort={longTermStatsSort.toggleSort}
+                            align="right"
+                            className="text-slate-300 font-semibold"
+                          />
+                          <SortableTableHead
+                            label="SL Bán"
+                            sortKey="totalSellQuantity"
+                            activeKey={longTermStatsSort.sortKey}
+                            direction={longTermStatsSort.sortDirection}
+                            onSort={longTermStatsSort.toggleSort}
+                            align="right"
+                            className="text-slate-300 font-semibold"
+                          />
+                          <SortableTableHead
+                            label="GT Mua"
+                            sortKey="totalBuyValue"
+                            activeKey={longTermStatsSort.sortKey}
+                            direction={longTermStatsSort.sortDirection}
+                            onSort={longTermStatsSort.toggleSort}
+                            align="right"
+                            className="text-slate-300 font-semibold"
+                          />
+                          <SortableTableHead
+                            label="GT Bán"
+                            sortKey="totalSellValue"
+                            activeKey={longTermStatsSort.sortKey}
+                            direction={longTermStatsSort.sortDirection}
+                            onSort={longTermStatsSort.toggleSort}
+                            align="right"
+                            className="text-slate-300 font-semibold"
+                          />
+                          <SortableTableHead
+                            label="Lợi nhuận"
+                            sortKey="totalProfit"
+                            activeKey={longTermStatsSort.sortKey}
+                            direction={longTermStatsSort.sortDirection}
+                            onSort={longTermStatsSort.toggleSort}
+                            align="right"
+                            className="text-slate-300 font-semibold"
+                          />
                         </TableRow>
                       </TableHeader>
-                      <TableBody>
-                        {stats.longTermStatsByStock.map((stock, index) => (
-                          <TableRow
-                            key={`${stock.stockCode}-${stock.company}-${index}`}
-                            className="border-slate-700 hover:bg-slate-700/30"
-                          >
-                            <TableCell>
-                              <span className="font-mono font-semibold text-cyan-400">
-                                {stock.stockCode}
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-sm text-slate-400">
-                                {stock.companyName || "-"}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-right text-slate-200">
-                              {stock.marketPrice > 0
-                                ? formatCurrency(stock.marketPrice)
-                                : "-"}
-                            </TableCell>
-                            <TableCell className="text-right text-slate-200">
-                              {stock.buyOrders}
-                            </TableCell>
-                            <TableCell className="text-right text-slate-200">
-                              {stock.sellOrders}
-                            </TableCell>
-                            <TableCell className="text-right text-slate-200">
-                              {formatCurrency(stock.totalBuyQuantity)}
-                            </TableCell>
-                            <TableCell className="text-right text-slate-200">
-                              {formatCurrency(stock.totalSellQuantity)}
-                            </TableCell>
-                            <TableCell className="text-right text-emerald-400">
-                              {formatCurrency(stock.totalBuyValue)}
-                            </TableCell>
-                            <TableCell className="text-right text-red-400">
-                              {formatCurrency(stock.totalSellValue)}
-                            </TableCell>
-                            <TableCell
-                              className={`text-right font-semibold ${
-                                stock.totalProfit >= 0
-                                  ? "text-emerald-400"
-                                  : "text-red-400"
-                              }`}
+                      <FlipTableBody flipKey={longTermStatsSort.flipKey}>
+                        {sortedLongTermStats.map((stock) => {
+                          const rowKey = `${stock.stockCode}-${stock.company}`;
+                          return (
+                            <TableRow
+                              key={rowKey}
+                              data-flip-id={rowKey}
+                              className="border-slate-700 hover:bg-slate-700/30"
                             >
-                              {stock.totalProfit >= 0 ? "+" : ""}
-                              {formatCurrency(stock.totalProfit)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
+                              <TableCell>
+                                <span className="font-mono font-semibold text-cyan-400">
+                                  {stock.stockCode}
+                                </span>
+                              </TableCell>
+                              <TableCell>
+                                <span className="text-sm text-slate-400">
+                                  {stock.companyName || "-"}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right text-slate-200">
+                                {stock.marketPrice > 0
+                                  ? formatCurrency(stock.marketPrice)
+                                  : "-"}
+                              </TableCell>
+                              <TableCell className="text-right text-slate-200">
+                                {stock.buyOrders}
+                              </TableCell>
+                              <TableCell className="text-right text-slate-200">
+                                {stock.sellOrders}
+                              </TableCell>
+                              <TableCell className="text-right text-slate-200">
+                                {formatCurrency(stock.totalBuyQuantity)}
+                              </TableCell>
+                              <TableCell className="text-right text-slate-200">
+                                {formatCurrency(stock.totalSellQuantity)}
+                              </TableCell>
+                              <TableCell className="text-right text-emerald-400">
+                                {formatCurrency(stock.totalBuyValue)}
+                              </TableCell>
+                              <TableCell className="text-right text-red-400">
+                                {formatCurrency(stock.totalSellValue)}
+                              </TableCell>
+                              <TableCell
+                                className={`text-right font-semibold ${
+                                  stock.totalProfit >= 0
+                                    ? "text-emerald-400"
+                                    : "text-red-400"
+                                }`}
+                              >
+                                {stock.totalProfit >= 0 ? "+" : ""}
+                                {formatCurrency(stock.totalProfit)}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </FlipTableBody>
                     </Table>
                   </div>
                 ) : (
@@ -1001,27 +1591,57 @@ export default function DashboardPage() {
                     <Table>
                       <TableHeader>
                         <TableRow className="bg-slate-900/50 hover:bg-slate-900/50">
-                          <TableHead className="text-slate-300 font-semibold">
-                            Mã CP
-                          </TableHead>
-                          <TableHead className="text-slate-300 font-semibold text-right">
-                            Tổng số
-                          </TableHead>
-                          <TableHead className="text-slate-300 font-semibold text-right">
-                            Cổ phiếu
-                          </TableHead>
-                          <TableHead className="text-slate-300 font-semibold text-right">
-                            Tiền mặt
-                          </TableHead>
-                          <TableHead className="text-slate-300 font-semibold text-right">
-                            Tổng giá trị (%)
-                          </TableHead>
+                          <SortableTableHead
+                            label="Mã CP"
+                            sortKey="stockCode"
+                            activeKey={dividendStatsSort.sortKey}
+                            direction={dividendStatsSort.sortDirection}
+                            onSort={dividendStatsSort.toggleSort}
+                            className="text-slate-300 font-semibold"
+                          />
+                          <SortableTableHead
+                            label="Tổng số"
+                            sortKey="count"
+                            activeKey={dividendStatsSort.sortKey}
+                            direction={dividendStatsSort.sortDirection}
+                            onSort={dividendStatsSort.toggleSort}
+                            align="right"
+                            className="text-slate-300 font-semibold"
+                          />
+                          <SortableTableHead
+                            label="Cổ phiếu"
+                            sortKey="stockDividends"
+                            activeKey={dividendStatsSort.sortKey}
+                            direction={dividendStatsSort.sortDirection}
+                            onSort={dividendStatsSort.toggleSort}
+                            align="right"
+                            className="text-slate-300 font-semibold"
+                          />
+                          <SortableTableHead
+                            label="Tiền mặt"
+                            sortKey="cashDividends"
+                            activeKey={dividendStatsSort.sortKey}
+                            direction={dividendStatsSort.sortDirection}
+                            onSort={dividendStatsSort.toggleSort}
+                            align="right"
+                            className="text-slate-300 font-semibold"
+                          />
+                          <SortableTableHead
+                            label="Tổng giá trị (%)"
+                            sortKey="totalValue"
+                            activeKey={dividendStatsSort.sortKey}
+                            direction={dividendStatsSort.sortDirection}
+                            onSort={dividendStatsSort.toggleSort}
+                            align="right"
+                            className="text-slate-300 font-semibold"
+                          />
                         </TableRow>
                       </TableHeader>
-                      <TableBody>
-                        {stats.dividendStatsByStock.map((stock) => (
+                      <FlipTableBody flipKey={dividendStatsSort.flipKey}>
+                        {sortedDividendStats.map((stock) => (
                           <TableRow
                             key={stock._id}
+                            data-flip-id={stock._id}
                             className="border-slate-700 hover:bg-slate-700/30"
                           >
                             <TableCell>
@@ -1043,7 +1663,7 @@ export default function DashboardPage() {
                             </TableCell>
                           </TableRow>
                         ))}
-                      </TableBody>
+                      </FlipTableBody>
                     </Table>
                   </div>
                 ) : (

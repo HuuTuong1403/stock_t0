@@ -84,6 +84,70 @@ export async function GET(request: NextRequest) {
       { $sort: { "_id.year": 1, "_id.month": 1 } },
     ]);
 
+    const monthlyLongTermProfit = await LongTermOrder.aggregate([
+      {
+        $match: {
+          ...ownerFilter,
+          type: "SELL",
+          tradeDate: { $gte: sixMonthsAgo },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$tradeDate" },
+            month: { $month: "$tradeDate" },
+          },
+          totalProfit: { $sum: "$profit" },
+          orderCount: { $sum: 1 },
+        },
+      },
+      { $sort: { "_id.year": 1, "_id.month": 1 } },
+    ]);
+
+    const monthlyProfitMap = new Map<
+      string,
+      {
+        year: number;
+        month: number;
+        t0Profit: number;
+        longTermProfit: number;
+        totalProfit: number;
+      }
+    >();
+
+    for (const item of monthlyT0Profit) {
+      const key = `${item._id.year}-${item._id.month}`;
+      monthlyProfitMap.set(key, {
+        year: item._id.year,
+        month: item._id.month,
+        t0Profit: item.totalProfit,
+        longTermProfit: 0,
+        totalProfit: item.totalProfit,
+      });
+    }
+
+    for (const item of monthlyLongTermProfit) {
+      const key = `${item._id.year}-${item._id.month}`;
+      const existing = monthlyProfitMap.get(key);
+      if (existing) {
+        existing.longTermProfit = item.totalProfit;
+        existing.totalProfit = existing.t0Profit + item.totalProfit;
+      } else {
+        monthlyProfitMap.set(key, {
+          year: item._id.year,
+          month: item._id.month,
+          t0Profit: 0,
+          longTermProfit: item.totalProfit,
+          totalProfit: item.totalProfit,
+        });
+      }
+    }
+
+    const monthlyProfit = Array.from(monthlyProfitMap.values()).sort(
+      (a, b) => a.year - b.year || a.month - b.month
+    );
+
     // Get T0 stats by stock code and company
     const t0StatsByStock = await T0Order.aggregate([
       { $match: ownerFilter },
@@ -94,6 +158,7 @@ export async function GET(request: NextRequest) {
             company: "$company",
           },
           orderCount: { $sum: 1 },
+          totalQuantity: { $sum: "$quantity" },
           totalProfitBeforeFees: { $sum: "$profitBeforeFees" },
           totalProfitAfterFees: { $sum: "$profitAfterFees" },
           totalBuyValue: { $sum: "$buyValue" },
@@ -135,6 +200,7 @@ export async function GET(request: NextRequest) {
           companyName: { $ifNull: ["$companyInfo.name", ""] },
           marketPrice: { $ifNull: ["$stockInfo.marketPrice", 0] },
           orderCount: 1,
+          totalQuantity: 1,
           totalProfitBeforeFees: 1,
           totalProfitAfterFees: 1,
           totalBuyValue: 1,
@@ -479,6 +545,93 @@ export async function GET(request: NextRequest) {
       },
     ]);
 
+    type CombinedStat = {
+      stockCode: string;
+      marketPrice: number;
+      buyQuantity: number;
+      sellQuantity: number;
+      buyValue: number;
+      sellValue: number;
+      t0Profit: number;
+      longTermProfit: number;
+      totalProfit: number;
+    };
+
+    const combinedStatsMap = new Map<string, CombinedStat>();
+
+    for (const t0 of t0StatsByStock) {
+      const existing = combinedStatsMap.get(t0.stockCode);
+      if (existing) {
+        existing.buyQuantity += t0.totalQuantity;
+        existing.sellQuantity += t0.totalQuantity;
+        existing.buyValue += t0.totalBuyValue;
+        existing.sellValue += t0.totalSellValue;
+        existing.t0Profit += t0.totalProfitAfterFees;
+        existing.totalProfit += t0.totalProfitAfterFees;
+        if (t0.marketPrice > 0) {
+          existing.marketPrice = t0.marketPrice;
+        }
+      } else {
+        combinedStatsMap.set(t0.stockCode, {
+          stockCode: t0.stockCode,
+          marketPrice: t0.marketPrice || 0,
+          buyQuantity: t0.totalQuantity,
+          sellQuantity: t0.totalQuantity,
+          buyValue: t0.totalBuyValue,
+          sellValue: t0.totalSellValue,
+          t0Profit: t0.totalProfitAfterFees,
+          longTermProfit: 0,
+          totalProfit: t0.totalProfitAfterFees,
+        });
+      }
+    }
+
+    for (const lt of longTermStatsByStock) {
+      const existing = combinedStatsMap.get(lt.stockCode);
+      if (existing) {
+        existing.buyQuantity += lt.totalBuyQuantity;
+        existing.sellQuantity += lt.totalSellQuantity;
+        existing.buyValue += lt.totalBuyValue;
+        existing.sellValue += lt.totalSellValue;
+        existing.longTermProfit += lt.totalProfit;
+        existing.totalProfit += lt.totalProfit;
+        if (lt.marketPrice > 0) {
+          existing.marketPrice = lt.marketPrice;
+        }
+      } else {
+        combinedStatsMap.set(lt.stockCode, {
+          stockCode: lt.stockCode,
+          marketPrice: lt.marketPrice || 0,
+          buyQuantity: lt.totalBuyQuantity,
+          sellQuantity: lt.totalSellQuantity,
+          buyValue: lt.totalBuyValue,
+          sellValue: lt.totalSellValue,
+          t0Profit: 0,
+          longTermProfit: lt.totalProfit,
+          totalProfit: lt.totalProfit,
+        });
+      }
+    }
+
+    const combinedStatsByStock = Array.from(combinedStatsMap.values())
+      .map((item) => {
+        const remainingQuantity = item.buyQuantity - item.sellQuantity;
+        return {
+          stockCode: item.stockCode,
+          buyQuantity: item.buyQuantity,
+          sellQuantity: item.sellQuantity,
+          remainingQuantity,
+          buyValue: item.buyValue,
+          sellValue: item.sellValue,
+          remainingValue:
+            remainingQuantity > 0 ? remainingQuantity * item.marketPrice : 0,
+          t0Profit: item.t0Profit,
+          longTermProfit: item.longTermProfit,
+          totalProfit: item.totalProfit,
+        };
+      })
+      .sort((a, b) => b.totalProfit - a.totalProfit);
+
     return NextResponse.json({
       counts: {
         stocks: stockCount,
@@ -496,10 +649,12 @@ export async function GET(request: NextRequest) {
       dividendSummary: dividendResult,
       recentT0Orders,
       monthlyT0Profit,
+      monthlyProfit,
       longTermPortfolio,
       t0StatsByStock,
       longTermStatsByStock,
       dividendStatsByStock,
+      combinedStatsByStock,
     });
   } catch (error) {
     console.error("Error fetching stats:", error);
