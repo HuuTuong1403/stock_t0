@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { Dividend, LongTermOrder } from "@/lib/models";
 import { requireAuth } from "@/lib/services/auth";
-
-const CASH_DIVIDEND_PAR_VALUE = 10_000;
+import { getCashDividendPriceReduction } from "@/lib/constants/dividend";
 
 /**
  * Adjust stock orders based on dividend (both STOCK and CASH)
@@ -138,9 +137,7 @@ export async function POST(request: NextRequest) {
       }
     } else {
       // CASH DIVIDEND: Giá giảm cố định theo mệnh giá 10.000đ, số lượng không đổi
-      const priceReduction = Math.round(
-        (CASH_DIVIDEND_PAR_VALUE * dividend.value) / 100
-      );
+      const priceReduction = getCashDividendPriceReduction(dividend.value);
 
       for (const order of longTermOrders) {
         order.price = Math.max(0, order.price - priceReduction);
@@ -165,7 +162,7 @@ export async function POST(request: NextRequest) {
       adjustmentType:
         dividend.type === "STOCK"
           ? "Tăng số lượng, giảm giá (stock dividend)"
-          : `Giảm giá ${Math.round((CASH_DIVIDEND_PAR_VALUE * dividend.value) / 100)}đ (mệnh giá 10.000đ × ${dividend.value}%), số lượng không đổi (cash dividend)`,
+          : `Giảm giá ${getCashDividendPriceReduction(dividend.value)}đ (mệnh giá 10.000đ × ${dividend.value}%), số lượng không đổi (cash dividend)`,
       note: "Lệnh T0 (giao dịch trong ngày) không bị điều chỉnh vì đã đóng vị thế",
     });
   } catch (error) {

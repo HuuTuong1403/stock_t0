@@ -3,6 +3,7 @@ import { Types } from "mongoose";
 import dbConnect from "@/lib/mongodb";
 import { Dividend, LongTermOrder } from "@/lib/models";
 import { requireAuth } from "@/lib/services/auth";
+import { getCashDividendPriceReduction } from "@/lib/constants/dividend";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -181,15 +182,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
             revertedCount++;
           }
         } else {
-          // REVERT CASH DIVIDEND: Tăng giá về ban đầu, số lượng không đổi
-          const priceAdjustmentRatio = 1 - dividend.value / 100; // e.g., 10% -> 0.9
-          const revertRatio = 1 / priceAdjustmentRatio; // e.g., 0.9 -> 1.111...
+          // REVERT CASH DIVIDEND: Cộng lại số tiền đã trừ (mệnh giá 10.000đ × %)
+          const priceIncrease = getCashDividendPriceReduction(dividend.value);
 
           for (const order of longTermOrders) {
-            // Revert price back to original
-            order.price = Math.floor(order.price * revertRatio);
-
-            // Quantity remains the same
+            order.price = order.price + priceIncrease;
             await order.save();
             revertedCount++;
           }
