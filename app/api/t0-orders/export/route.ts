@@ -12,7 +12,34 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { user } = auth;
-    const filter = { userId: user._id };
+
+    const searchParams = request.nextUrl.searchParams;
+    const stockCode = searchParams.get("stockCode");
+    const companyId = searchParams.get("companyId");
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const filter: any = { userId: user._id };
+
+    if (stockCode) {
+      filter.stockCode =
+        stockCode === "all" ? { $exists: true } : stockCode.toUpperCase();
+    }
+
+    if (companyId) {
+      filter.company = companyId;
+    }
+
+    if (startDate || endDate) {
+      filter.tradeDate = {};
+      if (startDate) {
+        filter.tradeDate.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        filter.tradeDate.$lte = new Date(endDate);
+      }
+    }
 
     const orders = await T0Order.find(filter)
       .populate({ path: "company", select: "name", strictPopulate: false })

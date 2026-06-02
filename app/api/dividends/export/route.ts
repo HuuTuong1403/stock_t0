@@ -13,7 +13,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { user } = auth;
-    const filter = { userId: user._id };
+
+    const searchParams = request.nextUrl.searchParams;
+    const stockCode = searchParams.get("stockCode");
+    const type = searchParams.get("type");
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const filter: any = { userId: user._id };
+
+    if (stockCode) {
+      filter.stockCode =
+        stockCode === "all" ? { $exists: true } : stockCode.toUpperCase();
+    }
+
+    if (type && (type === "STOCK" || type === "CASH")) {
+      filter.type = type;
+    }
 
     const dividends = await Dividend.find(filter).sort({ dividendDate: -1 });
 

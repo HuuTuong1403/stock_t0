@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,6 +51,7 @@ import { ImportExportDialog } from "@/components/ImportExportDialog";
 import axiosClient from "@/lib/axiosClient";
 import { getErrorMessage } from "@/lib/utils/error";
 import { StockSelector } from "@/components/StockSelector";
+import { buildDividendExportParams } from "@/lib/utils/export-params";
 
 interface Dividend {
   _id: string;
@@ -104,6 +105,11 @@ export default function DividendsPage() {
       setLoading(false);
     }
   }, [filterStock, filterType]);
+
+  const exportParams = useMemo(
+    () => buildDividendExportParams(filterStock, filterType),
+    [filterStock, filterType]
+  );
 
   useEffect(() => {
     fetchDividends();
@@ -237,7 +243,11 @@ export default function DividendsPage() {
         </div>
 
         <div className="flex gap-2">
-          <ImportExportDialog type="dividends" onSuccess={fetchDividends} />
+          <ImportExportDialog
+            type="dividends"
+            onSuccess={fetchDividends}
+            exportParams={exportParams}
+          />
           <Button
             variant="outline"
             onClick={() => setShowFilters(!showFilters)}

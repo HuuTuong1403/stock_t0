@@ -8,7 +8,23 @@ export async function GET(request: NextRequest) {
   try {
     await dbConnect();
 
-    const stocks = await Stock.find({}).sort({ code: 1 });
+    const searchParams = request.nextUrl.searchParams;
+    const search = searchParams.get("search") || "";
+    const industry = searchParams.get("industry") || "";
+
+    const filter: Record<string, unknown> = {};
+    if (search) {
+      filter.$or = [
+        { code: { $regex: search, $options: "i" } },
+        { name: { $regex: search, $options: "i" } },
+        { industry: { $regex: search, $options: "i" } },
+      ];
+    }
+    if (industry) {
+      filter.industry = industry;
+    }
+
+    const stocks = await Stock.find(filter).sort({ code: 1 });
 
     // Prepare data for Excel
     const excelData = stocks.map((stock) => ({

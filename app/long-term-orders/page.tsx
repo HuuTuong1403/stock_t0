@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,6 +42,7 @@ import { formatCurrency, formatDate, formatDateInput } from "@/lib/format";
 import { ImportExportDialog } from "@/components/ImportExportDialog";
 import axiosClient from "@/lib/axiosClient";
 import { getErrorMessage } from "@/lib/utils/error";
+import { buildLongTermExportParams } from "@/lib/utils/export-params";
 
 interface LongTermOrder {
   _id: string;
@@ -123,6 +124,17 @@ export default function LongTermOrdersPage() {
       setLoading(false);
     }
   }, [filterStock, filterType, filterStartDate, filterEndDate]);
+
+  const exportParams = useMemo(
+    () =>
+      buildLongTermExportParams(
+        filterStock,
+        filterType,
+        filterStartDate,
+        filterEndDate
+      ),
+    [filterStock, filterType, filterStartDate, filterEndDate]
+  );
 
   useEffect(() => {
     fetchOrders();
@@ -365,7 +377,11 @@ export default function LongTermOrdersPage() {
         </div>
 
         <div className="flex gap-2">
-          <ImportExportDialog type="long-term-orders" onSuccess={fetchOrders} />
+          <ImportExportDialog
+            type="long-term-orders"
+            onSuccess={fetchOrders}
+            exportParams={exportParams}
+          />
           <Button
             variant="outline"
             onClick={() => setShowFilters(!showFilters)}

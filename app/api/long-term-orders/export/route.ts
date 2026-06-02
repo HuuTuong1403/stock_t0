@@ -12,10 +12,42 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { user } = auth;
-    const filter = { userId: user._id };
+
+    const searchParams = request.nextUrl.searchParams;
+    const stockCode = searchParams.get("stockCode");
+    const type = searchParams.get("type");
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
+    const companyId = searchParams.get("companyId");
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const filter: any = { userId: user._id };
+
+    if (stockCode) {
+      filter.stockCode =
+        stockCode === "all" ? { $exists: true } : stockCode.toUpperCase();
+    }
+
+    if (companyId) {
+      filter.company = companyId;
+    }
+
+    if (type && (type === "BUY" || type === "SELL")) {
+      filter.type = type;
+    }
+
+    if (startDate || endDate) {
+      filter.tradeDate = {};
+      if (startDate) {
+        filter.tradeDate.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        filter.tradeDate.$lte = new Date(endDate);
+      }
+    }
 
     const orders = await LongTermOrder.find(filter)
-      .populate({ path: "companyId", select: "name", strictPopulate: false })
+      .populate({ path: "company", select: "name", strictPopulate: false })
       .sort({ tradeDate: -1 });
 
     // Prepare data for Excel

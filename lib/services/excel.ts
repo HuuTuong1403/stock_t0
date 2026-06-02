@@ -1,10 +1,12 @@
 import axiosClient from "../axiosClient";
 
 export const exportExcel = async (
-  type: "stocks" | "t0-orders" | "long-term-orders" | "dividends"
+  type: "stocks" | "t0-orders" | "long-term-orders" | "dividends",
+  params?: Record<string, string>
 ) => {
   try {
     const { data } = await axiosClient.get(`/${type}/export`, {
+      params,
       responseType: "blob",
     });
 

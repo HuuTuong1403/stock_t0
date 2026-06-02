@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,6 +42,7 @@ import { ImportExportDialog } from "@/components/ImportExportDialog";
 import { getStockUsers } from "@/lib/services/stock-user";
 import axiosClient from "@/lib/axiosClient";
 import { getErrorMessage } from "@/lib/utils/error";
+import { buildT0ExportParams } from "@/lib/utils/export-params";
 
 interface T0Order {
   _id: string;
@@ -120,6 +121,11 @@ export default function T0OrdersPage() {
       setLoading(false);
     }
   }, [filterStock, filterStartDate, filterEndDate]);
+
+  const exportParams = useMemo(
+    () => buildT0ExportParams(filterStock, filterStartDate, filterEndDate),
+    [filterStock, filterStartDate, filterEndDate]
+  );
 
   useEffect(() => {
     fetchOrders();
@@ -292,7 +298,11 @@ export default function T0OrdersPage() {
         </div>
 
         <div className="flex gap-2">
-          <ImportExportDialog type="t0-orders" onSuccess={fetchOrders} />
+          <ImportExportDialog
+            type="t0-orders"
+            onSuccess={fetchOrders}
+            exportParams={exportParams}
+          />
           <Button
             variant="outline"
             onClick={() => setShowFilters(!showFilters)}

@@ -25,11 +25,13 @@ import {
 interface ImportExportDialogProps {
   type: "t0-orders" | "long-term-orders" | "dividends" | "stocks";
   onSuccess?: () => void;
+  exportParams?: Record<string, string>;
 }
 
 export function ImportExportDialog({
   type,
   onSuccess,
+  exportParams,
 }: ImportExportDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -48,7 +50,7 @@ export function ImportExportDialog({
     "long-term-orders": "Lệnh dài hạn",
     dividends: "Cổ tức",
     stocks: "Cổ phiếu",
-  };
+  };  
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -66,7 +68,7 @@ export function ImportExportDialog({
         });
       }, 100);
 
-      const response = await exportExcel(type);
+      const response = await exportExcel(type, exportParams);
 
       const url = window.URL.createObjectURL(response);
       const a = document.createElement("a");
@@ -202,6 +204,11 @@ export function ImportExportDialog({
               <h3 className="text-sm font-semibold text-slate-300">
                 Xuất dữ liệu
               </h3>
+              {exportParams && Object.keys(exportParams).length > 0 && (
+                <p className="text-xs text-cyan-400">
+                  Xuất theo bộ lọc đang áp dụng trên trang
+                </p>
+              )}
               <div className="flex gap-2">
                 <Button
                   onClick={handleExport}

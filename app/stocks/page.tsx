@@ -1,7 +1,7 @@
 "use client";
 
 import { toast } from "sonner";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Plus, Pencil, Trash2, Building2, Search } from "lucide-react";
 
 import { formatCurrency } from "@/lib/format";
@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ImportExportDialog } from "@/components/ImportExportDialog";
+import { buildStockExportParams } from "@/lib/utils/export-params";
 import {
   Table,
   TableBody,
@@ -89,6 +90,11 @@ export default function StocksPage() {
 
     return () => clearTimeout(timer);
   }, [searchTerm]);
+
+  const exportParams = useMemo(
+    () => buildStockExportParams(debouncedSearchTerm),
+    [debouncedSearchTerm]
+  );
 
   // Fetch stocks when page or search changes
   useEffect(() => {
@@ -192,6 +198,7 @@ export default function StocksPage() {
           <div className="flex gap-2">
             <ImportExportDialog
               type="stocks"
+              exportParams={exportParams}
               onSuccess={() => {
                 // Trigger refetch by resetting page
                 setCurrentPage(1);
