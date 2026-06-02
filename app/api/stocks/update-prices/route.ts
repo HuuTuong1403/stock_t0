@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { IUser } from "@/lib/models/User";
 import { Stock, User } from "@/lib/models";
+import { requireAuth } from "@/lib/services/auth";
 import { subscribeBatch } from "@/lib/services/wss-client";
 
 /**
@@ -84,6 +85,18 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    await dbConnect();
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (auth.user.type !== "admin") {
+      return NextResponse.json(
+        { error: "Bạn không có quyền truy cập" },
+        { status: 403 }
+      );
+    }
+
     console.log(
       `[MANUAL] Update prices triggered at ${new Date().toISOString()}`
     );

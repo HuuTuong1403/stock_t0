@@ -108,3 +108,29 @@
 ::-webkit-scrollbar-thumb:hover {
   background: oklch(0.45 0.01 260);
 }
+
+@keyframes flash-up-bg {
+  0% {
+    background-color: rgb(16 185 129 / 0.35);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes flash-down-bg {
+  0% {
+    background-color: rgb(239 68 68 / 0.35);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.flash-up {
+  animation: flash-up-bg 1.5s ease-out;
+}
+
+.flash-down {
+  animation: flash-down-bg 1.5s ease-out;
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Card,
   CardContent,
@@ -35,7 +35,12 @@ import { getErrorMessage } from "@/lib/utils/error";
 import { MonthlyProfitChart } from "@/components/MonthlyProfitChart";
 import { SortableTableHead } from "@/components/SortableTableHead";
 import { FlipTableBody } from "@/components/FlipTableBody";
+import { FlashPrice } from "@/components/FlashPrice";
+import { PageRefreshBar } from "@/components/PageRefreshBar";
+import { UpdatePricesButton } from "@/components/UpdatePricesButton";
+import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { sortTableData, useTableSort } from "@/lib/hooks/use-table-sort";
+import { useAutoRefresh } from "@/lib/hooks/use-auto-refresh";
 
 interface Stats {
   counts: {
@@ -170,6 +175,9 @@ function recordSortValue<T extends object>(item: T, key: string) {
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const recentOrdersSort = useTableSort();
   const combinedSort = useTableSort();
@@ -178,21 +186,39 @@ export default function DashboardPage() {
   const longTermStatsSort = useTableSort();
   const dividendStatsSort = useTableSort();
 
+  const fetchStats = useCallback(
+    async (opts?: { silent?: boolean; manual?: boolean }) => {
+      const silent = opts?.silent ?? false;
+      const manual = opts?.manual ?? false;
+
+      if (manual) setRefreshing(true);
+
+      try {
+        const { data } = await axiosClient.get("/stats");
+        setStats(data);
+        setLastUpdated(new Date());
+      } catch (error: unknown) {
+        console.error("Error fetching stats:", error);
+        if (!silent) {
+          toast.error(getErrorMessage(error) || "Lỗi khi tải thống kê");
+        }
+      } finally {
+        setLoading(false);
+        if (manual) setRefreshing(false);
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     fetchStats();
-  }, []);
+    axiosClient
+      .get("/auth/me")
+      .then(({ data }) => setIsAdmin(data.user?.type === "admin"))
+      .catch(() => setIsAdmin(false));
+  }, [fetchStats]);
 
-  const fetchStats = async () => {
-    try {
-      const { data } = await axiosClient.get("/stats");
-      setStats(data);
-    } catch (error: unknown) {
-      console.error("Error fetching stats:", error);
-      toast.error(getErrorMessage(error) || "Lỗi khi tải thống kê");
-    } finally {
-      setLoading(false);
-    }
-  };
+  useAutoRefresh(() => fetchStats({ silent: true }));
 
   const getColorClass = (color: string) => {
     const colors: Record<string, { bg: string; text: string; border: string }> =
@@ -389,27 +415,37 @@ export default function DashboardPage() {
     ],
   );
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-400"></div>
-      </div>
-    );
+  if (loading && !stats) {
+    return <DashboardSkeleton />;
   }
 
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-          <div className="p-2 bg-linear-to-br from-emerald-500/20 to-cyan-500/20 rounded-xl border border-emerald-500/30">
-            <LayoutDashboard className="h-8 w-8 text-emerald-400" />
-          </div>
-          Dashboard
-        </h1>
-        <p className="text-slate-400 mt-2">
-          Tổng quan về hoạt động giao dịch của bạn
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+            <div className="p-2 bg-linear-to-br from-emerald-500/20 to-cyan-500/20 rounded-xl border border-emerald-500/30">
+              <LayoutDashboard className="h-8 w-8 text-emerald-400" />
+            </div>
+            Dashboard
+          </h1>
+          <p className="text-slate-400 mt-2">
+            Tổng quan về hoạt động giao dịch của bạn
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {isAdmin && (
+            <UpdatePricesButton
+              onSuccess={() => fetchStats({ silent: true })}
+            />
+          )}
+          <PageRefreshBar
+            lastUpdated={lastUpdated}
+            refreshing={refreshing}
+            onRefresh={() => fetchStats({ manual: true })}
+          />
+        </div>
       </div>
 
       {/* Quick Stats */}
@@ -1117,9 +1153,11 @@ export default function DashboardPage() {
                             : "-"}
                         </TableCell>
                         <TableCell className="text-right text-slate-200">
-                          {stock.marketPrice > 0
-                            ? formatCurrency(stock.marketPrice)
-                            : "-"}
+                          <FlashPrice value={stock.marketPrice}>
+                            {stock.marketPrice > 0
+                              ? formatCurrency(stock.marketPrice)
+                              : "-"}
+                          </FlashPrice>
                         </TableCell>
                         <TableCell
                           className={`text-right font-semibold ${
@@ -1128,8 +1166,13 @@ export default function DashboardPage() {
                               : "text-red-400"
                           }`}
                         >
-                          {profitByAvg >= 0 ? "+" : ""}
-                          {formatCurrency(profitByAvg * held)}
+                          <FlashPrice
+                            value={profitByAvg * held}
+                            showArrow={false}
+                          >
+                            {profitByAvg >= 0 ? "+" : ""}
+                            {formatCurrency(profitByAvg * held)}
+                          </FlashPrice>
                         </TableCell>
                         <TableCell
                           className={`text-right font-semibold ${
@@ -1384,9 +1427,11 @@ export default function DashboardPage() {
                                 </span>
                               </TableCell>
                               <TableCell className="text-right text-slate-200">
-                                {stock.marketPrice > 0
-                                  ? formatCurrency(stock.marketPrice)
-                                  : "-"}
+                                <FlashPrice value={stock.marketPrice}>
+                                  {stock.marketPrice > 0
+                                    ? formatCurrency(stock.marketPrice)
+                                    : "-"}
+                                </FlashPrice>
                               </TableCell>
                               <TableCell className="text-right text-slate-200">
                                 {stock.orderCount}
@@ -1538,9 +1583,11 @@ export default function DashboardPage() {
                                 </span>
                               </TableCell>
                               <TableCell className="text-right text-slate-200">
-                                {stock.marketPrice > 0
-                                  ? formatCurrency(stock.marketPrice)
-                                  : "-"}
+                                <FlashPrice value={stock.marketPrice}>
+                                  {stock.marketPrice > 0
+                                    ? formatCurrency(stock.marketPrice)
+                                    : "-"}
+                                </FlashPrice>
                               </TableCell>
                               <TableCell className="text-right text-slate-200">
                                 {stock.buyOrders}

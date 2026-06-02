@@ -1,7 +1,7 @@
 "use client";
 
 import { toast } from "sonner";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Plus, Pencil, Trash2, Building2, Search } from "lucide-react";
 
 import { formatCurrency } from "@/lib/format";
@@ -16,6 +16,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ImportExportDialog } from "@/components/ImportExportDialog";
+import { FlashPrice } from "@/components/FlashPrice";
+import { PageRefreshBar } from "@/components/PageRefreshBar";
+import { UpdatePricesButton } from "@/components/UpdatePricesButton";
+import { StocksTableSkeleton } from "@/components/skeletons/StocksTableSkeleton";
+import { useAutoRefresh } from "@/lib/hooks/use-auto-refresh";
+import axiosClient from "@/lib/axiosClient";
 import { buildStockExportParams } from "@/lib/utils/export-params";
 import {
   Table,
@@ -64,6 +70,9 @@ interface PaginationData {
 export default function StocksPage() {
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingStock, setEditingStock] = useState<Stock | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -96,11 +105,15 @@ export default function StocksPage() {
     [debouncedSearchTerm]
   );
 
-  // Fetch stocks when page or search changes
-  useEffect(() => {
-    const fetchStocks = async () => {
+  const fetchStocks = useCallback(
+    async (opts?: { silent?: boolean; manual?: boolean }) => {
+      const silent = opts?.silent ?? false;
+      const manual = opts?.manual ?? false;
+
+      if (!silent) setLoading(true);
+      if (manual) setRefreshing(true);
+
       try {
-        setLoading(true);
         const res = await getStocks({
           page: currentPage,
           limit: 50,
@@ -112,20 +125,36 @@ export default function StocksPage() {
           if ("pagination" in res) {
             setPagination(res.pagination as PaginationData);
           }
+          setLastUpdated(new Date());
         } else {
           setStocks([]);
         }
       } catch (error) {
         console.error("Error fetching stocks:", error);
-        toast.error("Lỗi khi tải danh sách cổ phiếu");
+        if (!silent) {
+          toast.error("Lỗi khi tải danh sách cổ phiếu");
+        }
         setStocks([]);
       } finally {
         setLoading(false);
+        if (manual) setRefreshing(false);
       }
-    };
+    },
+    [currentPage, debouncedSearchTerm]
+  );
 
+  useEffect(() => {
     fetchStocks();
-  }, [currentPage, debouncedSearchTerm]);
+  }, [fetchStocks]);
+
+  useEffect(() => {
+    axiosClient
+      .get("/auth/me")
+      .then(({ data }) => setIsAdmin(data.user?.type === "admin"))
+      .catch(() => setIsAdmin(false));
+  }, []);
+
+  useAutoRefresh(() => fetchStocks({ silent: true }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -195,7 +224,17 @@ export default function StocksPage() {
             </p>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 items-center">
+            {isAdmin && (
+              <UpdatePricesButton
+                onSuccess={() => fetchStocks({ silent: true })}
+              />
+            )}
+            <PageRefreshBar
+              lastUpdated={lastUpdated}
+              refreshing={refreshing}
+              onRefresh={() => fetchStocks({ manual: true })}
+            />
             <ImportExportDialog
               type="stocks"
               exportParams={exportParams}
@@ -326,9 +365,7 @@ export default function StocksPage() {
           </CardHeader>
           <CardContent>
             {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-400"></div>
-              </div>
+              <StocksTableSkeleton />
             ) : (
               <div className="rounded-lg border border-slate-700 overflow-hidden">
                 <Table>
@@ -400,9 +437,11 @@ export default function StocksPage() {
                               {stock.industry}
                             </TableCell>
                             <TableCell className="text-right text-slate-200">
-                              {stock.marketPrice && stock.marketPrice > 0
-                                ? formatCurrency(stock.marketPrice)
-                                : "-"}
+                              <FlashPrice value={stock.marketPrice ?? 0}>
+                                {stock.marketPrice && stock.marketPrice > 0
+                                  ? formatCurrency(stock.marketPrice)
+                                  : "-"}
+                              </FlashPrice>
                             </TableCell>
                             <TableCell className="text-right text-slate-200">
                               {stock.lowPrice && stock.lowPrice > 0
