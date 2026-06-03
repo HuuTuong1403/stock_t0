@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { TrendingUp } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import axiosClient from "@/lib/axiosClient";
+import { DNSE_TOKEN_EXPIRED_CODE } from "@/lib/constants/dnse";
 import { getErrorMessage } from "@/lib/utils/error";
 import { cn } from "@/lib/utils";
 
@@ -20,6 +22,7 @@ export function UpdatePricesButton({
   className,
   variant = "outline",
 }: UpdatePricesButtonProps) {
+  const router = useRouter();
   const [updating, setUpdating] = useState(false);
 
   const handleUpdate = async () => {
@@ -32,6 +35,15 @@ export function UpdatePricesButton({
       );
       onSuccess?.();
     } catch (error) {
+      const err = error as { code?: string; error?: string };
+      if (err?.code === DNSE_TOKEN_EXPIRED_CODE) {
+        toast.error(
+          getErrorMessage(error) ||
+            "Token DNSE đã hết hạn. Vui lòng cập nhật lại trong Cài đặt."
+        );
+        router.push("/settings");
+        return;
+      }
       toast.error(getErrorMessage(error) || "Lỗi khi cập nhật giá thị trường");
     } finally {
       setUpdating(false);
