@@ -30,8 +30,7 @@ export function UpdatePricesButton({
     try {
       const { data } = await axiosClient.post("/stocks/update-prices");
       toast.success(
-        data.message ||
-          `Cập nhật ${data.success}/${data.total} mã thành công`
+        data.message || `Cập nhật ${data.success}/${data.total} mã thành công`,
       );
       onSuccess?.();
     } catch (error) {
@@ -39,7 +38,7 @@ export function UpdatePricesButton({
       if (err?.code === DNSE_TOKEN_EXPIRED_CODE) {
         toast.error(
           getErrorMessage(error) ||
-            "Token DNSE đã hết hạn. Vui lòng cập nhật lại trong Cài đặt."
+            "Token DNSE đã hết hạn. Vui lòng cập nhật lại trong Cài đặt.",
         );
         router.push("/settings");
         return;
@@ -61,7 +60,7 @@ export function UpdatePricesButton({
         variant === "outline"
           ? "border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white"
           : "bg-amber-500/90 hover:bg-amber-500 text-white",
-        className
+        className,
       )}
     >
       <TrendingUp

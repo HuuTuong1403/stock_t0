@@ -54,6 +54,7 @@ interface LongTermOrder {
   price: number;
   fee: number;
   tax: number;
+  isAdditionalIssuance?: boolean;
   costBasis: number;
   avgCost: number;
   profit: number;
@@ -102,6 +103,7 @@ export default function LongTermOrdersPage() {
     price: "",
     costBasis: "",
     profit: "",
+    isAdditionalIssuance: false,
   });
 
   const fetchOrders = useCallback(async () => {
@@ -175,6 +177,8 @@ export default function LongTermOrdersPage() {
       if (formData.type === "SELL") {
         payload.costBasis = parseFloat(formData.costBasis) || 0;
         payload.profit = parseFloat(formData.profit) || 0;
+      } else {
+        payload.isAdditionalIssuance = formData.isAdditionalIssuance;
       }
 
       if (editingOrder) {
@@ -205,6 +209,7 @@ export default function LongTermOrdersPage() {
       price: order.price.toString(),
       costBasis: order.costBasis.toString(),
       profit: order.profit.toString(),
+      isAdditionalIssuance: order.isAdditionalIssuance ?? false,
     });
     setIsDialogOpen(true);
   };
@@ -277,6 +282,7 @@ export default function LongTermOrdersPage() {
       price: "",
       costBasis: "",
       profit: "",
+      isAdditionalIssuance: false,
     });
   };
 
@@ -432,7 +438,12 @@ export default function LongTermOrdersPage() {
                       <Select
                         value={formData.type}
                         onValueChange={(value: "BUY" | "SELL") =>
-                          setFormData({ ...formData, type: value })
+                          setFormData({
+                            ...formData,
+                            type: value,
+                            isAdditionalIssuance:
+                              value === "BUY" ? formData.isAdditionalIssuance : false,
+                          })
                         }
                       >
                         <SelectTrigger className="bg-slate-800 border-slate-600 text-white">
@@ -515,6 +526,24 @@ export default function LongTermOrdersPage() {
                       />
                     </div>
                   </div>
+                  {formData.type === "BUY" && (
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.isAdditionalIssuance}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            isAdditionalIssuance: e.target.checked,
+                          })
+                        }
+                        className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-slate-900 cursor-pointer"
+                      />
+                      <span className="text-sm text-slate-300">
+                        Mua phát hành thêm (không tính phí mua)
+                      </span>
+                    </label>
+                  )}
                 </div>
 
                 <DialogFooter>

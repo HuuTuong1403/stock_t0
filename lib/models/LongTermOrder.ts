@@ -14,6 +14,7 @@ export interface ILongTermOrder extends Document {
   price: number;
   fee: number;
   tax: number;
+  isAdditionalIssuance: boolean;
   costBasis: number;
   avgCost: number;
   profit: number;
@@ -66,6 +67,10 @@ const LongTermOrderSchema = new mongoose.Schema(
     tax: {
       type: Number,
       default: 0,
+    },
+    isAdditionalIssuance: {
+      type: Boolean,
+      default: false,
     },
     costBasis: {
       type: Number,
@@ -132,7 +137,8 @@ LongTermOrderSchema.pre("save", async function () {
     this.isModified("stockCode") ||
     this.isModified("quantity") ||
     this.isModified("price") ||
-    this.isModified("tradeDate")
+    this.isModified("tradeDate") ||
+    this.isModified("isAdditionalIssuance")
   ) {
     // Get all orders before this one (excluding current order)
     const previousOrders = await mongoose.models.LongTermOrder.find({
@@ -167,7 +173,9 @@ LongTermOrderSchema.pre("save", async function () {
     const previousAvgCost = lastOrder?.avgCost || 0;
 
     if (doc.type === "BUY") {
-      doc.fee = Math.round(value * company.buyFeeRate);
+      doc.fee = doc.isAdditionalIssuance
+        ? 0
+        : Math.round(value * company.buyFeeRate);
       doc.tax = 0;
       doc.costBasis = value + doc.fee;
       doc.profit = 0;
@@ -225,7 +233,9 @@ LongTermOrderSchema.pre("save", async function () {
   } else {
     // If not modifying key fields, just update fees for existing order
     if (doc.type === "BUY") {
-      doc.fee = Math.round(value * company.buyFeeRate);
+      doc.fee = doc.isAdditionalIssuance
+        ? 0
+        : Math.round(value * company.buyFeeRate);
       doc.tax = 0;
       doc.costBasis = value + doc.fee;
       doc.profit = 0;
