@@ -632,6 +632,53 @@ export async function GET(request: NextRequest) {
       })
       .sort((a, b) => b.totalProfit - a.totalProfit);
 
+    // Get sell order details per stock code (T0 round-trips + long-term SELL)
+    const [t0SellOrders, longTermSellOrders] = await Promise.all([
+      T0Order.find(ownerFilter)
+        .sort({ tradeDate: -1 })
+        .select("tradeDate stockCode quantity sellPrice profitAfterFees"),
+      LongTermOrder.find({ ...ownerFilter, type: "SELL" })
+        .sort({ tradeDate: -1 })
+        .select("tradeDate stockCode quantity price profit"),
+    ]);
+
+    type SellOrderInfo = {
+      tradeDate: Date;
+      type: "T0" | "LONG_TERM";
+      price: number;
+      quantity: number;
+      profit: number;
+    };
+
+    const sellOrdersByStock: Record<string, SellOrderInfo[]> = {};
+
+    for (const order of t0SellOrders) {
+      (sellOrdersByStock[order.stockCode] ||= []).push({
+        tradeDate: order.tradeDate,
+        type: "T0",
+        price: order.sellPrice,
+        quantity: order.quantity,
+        profit: order.profitAfterFees,
+      });
+    }
+
+    for (const order of longTermSellOrders) {
+      (sellOrdersByStock[order.stockCode] ||= []).push({
+        tradeDate: order.tradeDate,
+        type: "LONG_TERM",
+        price: order.price,
+        quantity: order.quantity,
+        profit: order.profit,
+      });
+    }
+
+    for (const code of Object.keys(sellOrdersByStock)) {
+      sellOrdersByStock[code].sort(
+        (a, b) =>
+          new Date(b.tradeDate).getTime() - new Date(a.tradeDate).getTime()
+      );
+    }
+
     return NextResponse.json({
       counts: {
         stocks: stockCount,
@@ -655,6 +702,7 @@ export async function GET(request: NextRequest) {
       longTermStatsByStock,
       dividendStatsByStock,
       combinedStatsByStock,
+      sellOrdersByStock,
     });
   } catch (error) {
     console.error("Error fetching stats:", error);

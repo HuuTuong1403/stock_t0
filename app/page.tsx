@@ -33,11 +33,16 @@ import { toast } from "sonner";
 import axiosClient from "@/lib/axiosClient";
 import { getErrorMessage } from "@/lib/utils/error";
 import { MonthlyProfitChart } from "@/components/MonthlyProfitChart";
+import { PortfolioAllocationChart } from "@/components/PortfolioAllocationChart";
 import { SortableTableHead } from "@/components/SortableTableHead";
 import { FlipTableBody } from "@/components/FlipTableBody";
 import { FlashPrice } from "@/components/FlashPrice";
 import { PageRefreshBar } from "@/components/PageRefreshBar";
 import { UpdatePricesButton } from "@/components/UpdatePricesButton";
+import {
+  SellOrdersPopover,
+  type SellOrderInfo,
+} from "@/components/SellOrdersPopover";
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { sortTableData, useTableSort } from "@/lib/hooks/use-table-sort";
 import { useAutoRefresh } from "@/lib/hooks/use-auto-refresh";
@@ -135,6 +140,7 @@ interface Stats {
     longTermProfit: number;
     totalProfit: number;
   }>;
+  sellOrdersByStock: Record<string, SellOrderInfo[]>;
 }
 
 const quickLinks = [
@@ -325,6 +331,22 @@ export default function DashboardPage() {
       ) ?? [],
     [stats?.longTermPortfolio],
   );
+
+  const allocationData = useMemo(() => {
+    const valueByStock = new Map<string, number>();
+    for (const stock of portfolioItems) {
+      const held = stock.quantity - stock.quantitySell;
+      const marketValue = held * stock.marketPrice;
+      if (marketValue <= 0) continue;
+      valueByStock.set(
+        stock.stockCode,
+        (valueByStock.get(stock.stockCode) ?? 0) + marketValue,
+      );
+    }
+    return Array.from(valueByStock.entries())
+      .map(([stockCode, value]) => ({ stockCode, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [portfolioItems]);
 
   const sortedPortfolio = useMemo(
     () =>
@@ -862,9 +884,10 @@ export default function DashboardPage() {
                       className="border-slate-700 hover:bg-slate-700/30"
                     >
                       <TableCell>
-                        <span className="font-mono font-semibold text-emerald-400">
-                          {stock.stockCode}
-                        </span>
+                        <SellOrdersPopover
+                          stockCode={stock.stockCode}
+                          orders={stats?.sellOrdersByStock?.[stock.stockCode]}
+                        />
                       </TableCell>
                       <TableCell className="text-right text-slate-200">
                         {formatCurrency(stock.buyQuantity)}
@@ -988,6 +1011,24 @@ export default function DashboardPage() {
                 </TableBody>
               </Table>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Portfolio Allocation Pie Chart */}
+      {allocationData.length > 0 && (
+        <Card className="bg-slate-800/50 border-slate-700/50">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-cyan-400" />
+              Tỷ trọng danh mục
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              Tỷ trọng theo giá trị thị trường của cổ phiếu đang nắm giữ
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PortfolioAllocationChart data={allocationData} />
           </CardContent>
         </Card>
       )}
