@@ -5,6 +5,7 @@ import {
   Legend,
   Pie,
   PieChart,
+  PieLabelRenderProps,
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
@@ -60,16 +61,16 @@ export function PortfolioAllocationChart({
           paddingAngle={2}
           stroke="#0f172a"
           strokeWidth={2}
-          label={({ stockCode, percent }) =>
-            `${stockCode} ${(((percent as number) ?? 0) * 100).toFixed(1)}%`
-          }
+          label={(props) => {
+            const { stockCode, percent } = props as PieLabelRenderProps & {
+              stockCode?: string;
+            };
+            return `${stockCode} ${(((percent as number) ?? 0) * 100).toFixed(1)}%`;
+          }}
           labelLine={false}
         >
           {chartData.map((entry, index) => (
-            <Cell
-              key={entry.stockCode}
-              fill={COLORS[index % COLORS.length]}
-            />
+            <Cell key={entry.stockCode} fill={COLORS[index % COLORS.length]} />
           ))}
         </Pie>
         <Tooltip
@@ -83,10 +84,7 @@ export function PortfolioAllocationChart({
           formatter={(value, _name, item) => {
             const num = typeof value === "number" ? value : 0;
             const share = (item?.payload?.share as number) ?? 0;
-            return [
-              `${formatCurrency(num)} (${share.toFixed(1)}%)`,
-              "Giá trị",
-            ];
+            return [`${formatCurrency(num)} (${share.toFixed(1)}%)`, "Giá trị"];
           }}
         />
         <Legend
