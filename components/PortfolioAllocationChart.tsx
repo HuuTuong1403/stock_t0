@@ -12,7 +12,7 @@ import {
 import { formatCurrency } from "@/lib/format";
 
 export interface AllocationItem {
-  stockCode: string;
+  name: string;
   value: number;
 }
 
@@ -53,7 +53,7 @@ export function PortfolioAllocationChart({
         <Pie
           data={chartData}
           dataKey="value"
-          nameKey="stockCode"
+          nameKey="name"
           cx="50%"
           cy="50%"
           innerRadius={70}
@@ -62,15 +62,15 @@ export function PortfolioAllocationChart({
           stroke="#0f172a"
           strokeWidth={2}
           label={(props) => {
-            const { stockCode, percent } = props as PieLabelRenderProps & {
-              stockCode?: string;
+            const { name, percent } = props as PieLabelRenderProps & {
+              name?: string;
             };
-            return `${stockCode} ${(((percent as number) ?? 0) * 100).toFixed(1)}%`;
+            return `${name} ${(((percent as number) ?? 0) * 100).toFixed(1)}%`;
           }}
           labelLine={false}
         >
           {chartData.map((entry, index) => (
-            <Cell key={entry.stockCode} fill={COLORS[index % COLORS.length]} />
+            <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
           ))}
         </Pie>
         <Tooltip

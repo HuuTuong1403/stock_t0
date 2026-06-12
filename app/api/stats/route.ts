@@ -148,6 +148,83 @@ export async function GET(request: NextRequest) {
       (a, b) => a.year - b.year || a.month - b.month
     );
 
+    // Cumulative realized profit/loss over time (all-time, monthly)
+    const [t0MonthlyAll, longTermMonthlyAll] = await Promise.all([
+      T0Order.aggregate([
+        { $match: ownerFilter },
+        {
+          $group: {
+            _id: {
+              year: { $year: "$tradeDate" },
+              month: { $month: "$tradeDate" },
+            },
+            t0Profit: { $sum: "$profitAfterFees" },
+          },
+        },
+      ]),
+      LongTermOrder.aggregate([
+        { $match: { ...ownerFilter, type: "SELL" } },
+        {
+          $group: {
+            _id: {
+              year: { $year: "$tradeDate" },
+              month: { $month: "$tradeDate" },
+            },
+            longTermProfit: { $sum: "$profit" },
+          },
+        },
+      ]),
+    ]);
+
+    const cumulativeMap = new Map<
+      string,
+      { year: number; month: number; t0Profit: number; longTermProfit: number }
+    >();
+
+    for (const item of t0MonthlyAll) {
+      const key = `${item._id.year}-${item._id.month}`;
+      const existing = cumulativeMap.get(key);
+      if (existing) {
+        existing.t0Profit += item.t0Profit;
+      } else {
+        cumulativeMap.set(key, {
+          year: item._id.year,
+          month: item._id.month,
+          t0Profit: item.t0Profit,
+          longTermProfit: 0,
+        });
+      }
+    }
+
+    for (const item of longTermMonthlyAll) {
+      const key = `${item._id.year}-${item._id.month}`;
+      const existing = cumulativeMap.get(key);
+      if (existing) {
+        existing.longTermProfit += item.longTermProfit;
+      } else {
+        cumulativeMap.set(key, {
+          year: item._id.year,
+          month: item._id.month,
+          t0Profit: 0,
+          longTermProfit: item.longTermProfit,
+        });
+      }
+    }
+
+    let runningTotal = 0;
+    const cumulativeProfit = Array.from(cumulativeMap.values())
+      .sort((a, b) => a.year - b.year || a.month - b.month)
+      .map((item) => {
+        const realizedProfit = item.t0Profit + item.longTermProfit;
+        runningTotal += realizedProfit;
+        return {
+          year: item.year,
+          month: item.month,
+          realizedProfit,
+          cumulativeProfit: runningTotal,
+        };
+      });
+
     // Get T0 stats by stock code and company
     const t0StatsByStock = await T0Order.aggregate([
       { $match: ownerFilter },
@@ -508,6 +585,7 @@ export async function GET(request: NextRequest) {
           stockCode: "$_id.stockCode",
           company: "$_id.company",
           companyName: { $ifNull: ["$companyInfo.name", ""] },
+          industry: { $ifNull: ["$stockInfo.industry", ""] },
           quantity: "$totalQuantity",
           quantitySell: "$totalQuantitySell",
           averageCostBasis: {
@@ -697,6 +775,7 @@ export async function GET(request: NextRequest) {
       recentT0Orders,
       monthlyT0Profit,
       monthlyProfit,
+      cumulativeProfit,
       longTermPortfolio,
       t0StatsByStock,
       longTermStatsByStock,

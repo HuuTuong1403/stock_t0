@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import axiosClient from "@/lib/axiosClient";
 import { getErrorMessage } from "@/lib/utils/error";
 import { MonthlyProfitChart } from "@/components/MonthlyProfitChart";
+import { CumulativeProfitChart } from "@/components/CumulativeProfitChart";
 import { PortfolioAllocationChart } from "@/components/PortfolioAllocationChart";
 import { SortableTableHead } from "@/components/SortableTableHead";
 import { FlipTableBody } from "@/components/FlipTableBody";
@@ -71,6 +72,7 @@ interface Stats {
     stockCode: string;
     company: string;
     companyName: string;
+    industry: string;
     quantity: number;
     quantitySell: number;
     averageCostBasis: number;
@@ -95,6 +97,12 @@ interface Stats {
     t0Profit: number;
     longTermProfit: number;
     totalProfit: number;
+  }>;
+  cumulativeProfit: Array<{
+    year: number;
+    month: number;
+    realizedProfit: number;
+    cumulativeProfit: number;
   }>;
   t0StatsByStock: Array<{
     stockCode: string;
@@ -344,7 +352,24 @@ export default function DashboardPage() {
       );
     }
     return Array.from(valueByStock.entries())
-      .map(([stockCode, value]) => ({ stockCode, value }))
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [portfolioItems]);
+
+  const industryAllocationData = useMemo(() => {
+    const valueByIndustry = new Map<string, number>();
+    for (const stock of portfolioItems) {
+      const held = stock.quantity - stock.quantitySell;
+      const marketValue = held * stock.marketPrice;
+      if (marketValue <= 0) continue;
+      const industry = stock.industry?.trim() || "Khác";
+      valueByIndustry.set(
+        industry,
+        (valueByIndustry.get(industry) ?? 0) + marketValue,
+      );
+    }
+    return Array.from(valueByIndustry.entries())
+      .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
   }, [portfolioItems]);
 
@@ -768,6 +793,24 @@ export default function DashboardPage() {
         </Card>
       )}
 
+      {/* Cumulative Realized Profit Chart */}
+      {stats?.cumulativeProfit && stats.cumulativeProfit.length > 0 && (
+        <Card className="bg-slate-800/50 border-slate-700/50">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-emerald-400" />
+              Lãi/lỗ thực hiện lũy kế
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              Tổng lãi/lỗ đã thực hiện (T0 + dài hạn) cộng dồn theo thời gian
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <CumulativeProfitChart data={stats.cumulativeProfit} />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Combined Stats by Stock */}
       {stats?.combinedStatsByStock && stats.combinedStatsByStock.length > 0 && (
         <Card className="bg-slate-800/50 border-slate-700/50">
@@ -1015,22 +1058,39 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {/* Portfolio Allocation Pie Chart */}
+      {/* Portfolio Allocation Pie Charts */}
       {allocationData.length > 0 && (
-        <Card className="bg-slate-800/50 border-slate-700/50">
-          <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-cyan-400" />
-              Tỷ trọng danh mục
-            </CardTitle>
-            <CardDescription className="text-slate-400">
-              Tỷ trọng theo giá trị thị trường của cổ phiếu đang nắm giữ
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <PortfolioAllocationChart data={allocationData} />
-          </CardContent>
-        </Card>
+        <div className="grid lg:grid-cols-2 gap-6">
+          <Card className="bg-slate-800/50 border-slate-700/50">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-cyan-400" />
+                Tỷ trọng theo mã
+              </CardTitle>
+              <CardDescription className="text-slate-400">
+                Tỷ trọng theo giá trị thị trường của cổ phiếu đang nắm giữ
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <PortfolioAllocationChart data={allocationData} />
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-800/50 border-slate-700/50">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-purple-400" />
+                Tỷ trọng theo ngành
+              </CardTitle>
+              <CardDescription className="text-slate-400">
+                Phân bổ giá trị thị trường danh mục theo ngành
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <PortfolioAllocationChart data={industryAllocationData} />
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* Long-term Portfolio */}
