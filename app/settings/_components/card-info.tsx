@@ -3,13 +3,13 @@
 import { useState } from "react";
 import { Info, Lock, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import axiosClient from "@/lib/axiosClient";
 import { getErrorMessage } from "@/lib/utils/error";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
-import { DialogApi } from "./dialog-api";
 import { DialogChangePass } from "./dialog-change-pass";
 
 interface CardInfoProps {
@@ -28,11 +28,21 @@ export const CardInfo = ({
   isAdmin,
 }: CardInfoProps) => {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [openChangePass, setOpenChangePass] = useState(false);
 
-  const handleConnectApi = () => {
-    setOpen(true);
+  const handleConnectApi = async () => {
+    setConnecting(true);
+    try {
+      await axiosClient.post("/dnse/auth", {});
+      toast.success("Kết nối API DNSE thành công");
+      router.refresh();
+    } catch (error: unknown) {
+      console.error("DNSE connect error:", error);
+      toast.error(getErrorMessage(error) || "Lỗi khi kết nối API DNSE");
+    } finally {
+      setConnecting(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -42,7 +52,6 @@ export const CardInfo = ({
       router.refresh();
     } catch (error: unknown) {
       console.error("Logout error:", error);
-      // Still redirect even if logout fails
       router.push("/login");
       router.refresh();
     }
@@ -73,9 +82,13 @@ export const CardInfo = ({
 
           <div className="flex flex-row gap-2">
             {isAdmin && !investorToken && (
-              <Button className="flex-1 h-auto text-lg" onClick={handleConnectApi}>
+              <Button
+                className="flex-1 h-auto text-lg"
+                onClick={handleConnectApi}
+                disabled={connecting}
+              >
                 <Info />
-                Kết nối API DNSE
+                {connecting ? "Đang kết nối..." : "Kết nối API DNSE"}
               </Button>
             )}
 
@@ -99,7 +112,6 @@ export const CardInfo = ({
           </div>
         </CardContent>
       </Card>
-      <DialogApi open={open} onOpenChange={setOpen} />
       <DialogChangePass
         open={openChangePass}
         onOpenChange={setOpenChangePass}
