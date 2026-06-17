@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "migrate": "tsx scripts/migrate-add-field.ts"
+    "migrate": "tsx scripts/migrate-add-field.ts",
+    "migrate:margin": "tsx scripts/migrate-margin-fields.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

@@ -77,6 +77,15 @@ export async function POST(request: NextRequest) {
           .trim();
         const quantity = Number(row["Số lượng"] || 0);
         const price = Number(row["Giá"] || 0);
+        const accountTypeStr = String(row["Loại TK"] || "")
+          .toUpperCase()
+          .trim();
+        const accountType =
+          accountTypeStr === "MARGIN" ||
+          accountTypeStr === "VAY" ||
+          accountTypeStr === "MARGIN (VAY)"
+            ? "MARGIN"
+            : "NORMAL";
 
         // Validation
         if (
@@ -137,6 +146,7 @@ export async function POST(request: NextRequest) {
           companyId: company._id.toString(),
           userId: user._id,
           type,
+          accountType,
           quantity,
           price,
           feeRate: type === "BUY" ? company.buyFeeRate : company.sellFeeRate,

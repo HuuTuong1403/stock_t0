@@ -4,22 +4,88 @@ import StockCompany, { IStockCompany } from "./StockCompany";
 
 export type OrderType = "BUY" | "SELL";
 
+export type AccountType = "NORMAL" | "MARGIN";
+
 export interface ILongTermOrder extends Document {
   tradeDate: Date;
   stockCode: string;
   userId: Types.ObjectId;
   company: Types.ObjectId | IStockCompany; // Có thể là ObjectId hoặc populated IStockCompany
   type: OrderType;
+  accountType: AccountType; // [Tài khoản thường hoặc tài khoản vay (margin)] - chọn khi MUA
   quantity: number;
   price: number;
   fee: number;
   tax: number;
+  marginFee: number; // [Phí margin tính khi BÁN lô mua bằng tài khoản vay, theo số ngày nắm giữ]
   isAdditionalIssuance: boolean;
   costBasis: number;
   avgCost: number;
   profit: number;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/**
+ * Tính phí margin cho một lệnh BÁN bằng cách khớp FIFO với các lô MUA trước đó.
+ * Chỉ các lô mua bằng tài khoản vay (MARGIN) mới phát sinh phí.
+ * Phí = SL khớp × giá mua × lãi suất margin/năm × số ngày nắm giữ / 365
+ */
+function computeMarginFeeForSell(
+  previousOrders: ILongTermOrder[],
+  sell: { quantity: number; tradeDate: Date },
+  marginFeeRate: number
+): number {
+  if (!marginFeeRate || marginFeeRate <= 0) return 0;
+
+  // Dựng hàng đợi các lô MUA còn mở, đã trừ phần bị bán bởi các lệnh BÁN trước đó (FIFO)
+  const lots: {
+    remaining: number;
+    buyDate: Date;
+    isMargin: boolean;
+    pricePerShare: number;
+  }[] = [];
+
+  for (const order of previousOrders) {
+    if (order.type === "BUY") {
+      lots.push({
+        remaining: order.quantity,
+        buyDate: new Date(order.tradeDate),
+        isMargin: order.accountType === "MARGIN",
+        pricePerShare: order.price,
+      });
+    } else {
+      let toConsume = order.quantity;
+      while (toConsume > 0 && lots.length > 0) {
+        const lot = lots[0];
+        const used = Math.min(lot.remaining, toConsume);
+        lot.remaining -= used;
+        toConsume -= used;
+        if (lot.remaining <= 0) lots.shift();
+      }
+    }
+  }
+
+  // Khớp lệnh bán hiện tại với các lô còn mở
+  let toSell = sell.quantity;
+  const sellDate = new Date(sell.tradeDate);
+  const DAY_MS = 1000 * 60 * 60 * 24;
+  let fee = 0;
+
+  for (const lot of lots) {
+    if (toSell <= 0) break;
+    const used = Math.min(lot.remaining, toSell);
+    toSell -= used;
+    if (lot.isMargin) {
+      const days = Math.max(
+        0,
+        Math.round((sellDate.getTime() - lot.buyDate.getTime()) / DAY_MS)
+      );
+      fee += (used * lot.pricePerShare * marginFeeRate * days) / 365;
+    }
+  }
+
+  return Math.round(fee);
 }
 
 const LongTermOrderSchema = new mongoose.Schema(
@@ -50,6 +116,11 @@ const LongTermOrderSchema = new mongoose.Schema(
       enum: ["BUY", "SELL"],
       required: [true, "Loại giao dịch là bắt buộc"],
     },
+    accountType: {
+      type: String,
+      enum: ["NORMAL", "MARGIN"],
+      default: "NORMAL",
+    },
     quantity: {
       type: Number,
       required: [true, "Số lượng là bắt buộc"],
@@ -65,6 +136,10 @@ const LongTermOrderSchema = new mongoose.Schema(
       default: 0,
     },
     tax: {
+      type: Number,
+      default: 0,
+    },
+    marginFee: {
       type: Number,
       default: 0,
     },
@@ -179,6 +254,7 @@ LongTermOrderSchema.pre("save", async function () {
       doc.tax = 0;
       doc.costBasis = value + doc.fee;
       doc.profit = 0;
+      doc.marginFee = 0;
 
       // Calculate avgCost based on previous avgCost and new purchase
       if (previousAvgCost > 0 && totalBuyQuantity > 0) {
@@ -229,6 +305,15 @@ LongTermOrderSchema.pre("save", async function () {
         doc.costBasis = 0;
         doc.profit = Math.round(value - doc.fee - doc.tax);
       }
+
+      // Phí margin: khớp FIFO với các lô mua bằng tài khoản vay theo số ngày nắm giữ
+      doc.marginFee = computeMarginFeeForSell(
+        previousOrders as ILongTermOrder[],
+        { quantity: doc.quantity, tradeDate: doc.tradeDate },
+        company.marginFeeRate || 0
+      );
+      doc.profit -= doc.marginFee;
+      doc.accountType = doc.marginFee > 0 ? "MARGIN" : "NORMAL";
     }
   } else {
     // If not modifying key fields, just update fees for existing order
@@ -239,6 +324,7 @@ LongTermOrderSchema.pre("save", async function () {
       doc.tax = 0;
       doc.costBasis = value + doc.fee;
       doc.profit = 0;
+      doc.marginFee = 0;
     } else {
       doc.fee = Math.round(value * company.sellFeeRate);
       doc.tax = Math.round(value * company.taxRate);

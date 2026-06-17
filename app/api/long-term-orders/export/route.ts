@@ -59,10 +59,12 @@ export async function GET(request: NextRequest) {
           ? (order.company as unknown as { name: string })?.name
           : "-",
       Loại: order.type === "BUY" ? "MUA" : "BÁN",
+      "Loại TK": order.accountType === "MARGIN" ? "Vay" : "Thường",
       "Số lượng": order.quantity,
       Giá: order.price,
       Phí: order.fee,
       Thuế: order.tax,
+      "Phí margin": order.marginFee || 0,
       "Giá vốn": order.costBasis,
       "Lợi nhuận": order.profit,
     }));
@@ -77,10 +79,12 @@ export async function GET(request: NextRequest) {
       { wch: 10 }, // Mã CP
       { wch: 20 }, // CTCK
       { wch: 8 }, // Loại
+      { wch: 10 }, // Loại TK
       { wch: 12 }, // Số lượng
       { wch: 12 }, // Giá
       { wch: 12 }, // Phí
       { wch: 12 }, // Thuế
+      { wch: 14 }, // Phí margin
       { wch: 15 }, // Giá vốn
       { wch: 15 }, // Lợi nhuận
     ];

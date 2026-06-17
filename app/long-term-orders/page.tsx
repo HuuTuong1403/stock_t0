@@ -44,16 +44,20 @@ import axiosClient from "@/lib/axiosClient";
 import { getErrorMessage } from "@/lib/utils/error";
 import { buildLongTermExportParams } from "@/lib/utils/export-params";
 
+type AccountType = "NORMAL" | "MARGIN";
+
 interface LongTermOrder {
   _id: string;
   tradeDate: string;
   stockCode: string;
   company: StockCompany;
   type: "BUY" | "SELL";
+  accountType?: AccountType;
   quantity: number;
   price: number;
   fee: number;
   tax: number;
+  marginFee?: number;
   isAdditionalIssuance?: boolean;
   costBasis: number;
   avgCost: number;
@@ -76,6 +80,7 @@ interface StockCompany {
   buyFeeRate: number;
   sellFeeRate: number;
   taxRate: number;
+  marginFeeRate?: number;
   isDefault: boolean;
 }
 
@@ -99,6 +104,7 @@ export default function LongTermOrdersPage() {
     tradeDate: formatDateInput(new Date()),
     stockCode: "",
     type: "BUY" as "BUY" | "SELL",
+    accountType: "NORMAL" as AccountType,
     quantity: "",
     price: "",
     costBasis: "",
@@ -179,6 +185,7 @@ export default function LongTermOrdersPage() {
         payload.profit = parseFloat(formData.profit) || 0;
       } else {
         payload.isAdditionalIssuance = formData.isAdditionalIssuance;
+        payload.accountType = formData.accountType;
       }
 
       if (editingOrder) {
@@ -205,6 +212,7 @@ export default function LongTermOrdersPage() {
       tradeDate: formatDateInput(order.tradeDate),
       stockCode: order.stockCode + "|" + (order.company as StockCompany)?._id,
       type: order.type,
+      accountType: order.accountType ?? "NORMAL",
       quantity: order.quantity.toString(),
       price: order.price.toString(),
       costBasis: order.costBasis.toString(),
@@ -278,6 +286,7 @@ export default function LongTermOrdersPage() {
       tradeDate: formatDateInput(new Date()),
       stockCode: "",
       type: "BUY",
+      accountType: "NORMAL",
       quantity: "",
       price: "",
       costBasis: "",
@@ -527,6 +536,35 @@ export default function LongTermOrdersPage() {
                     </div>
                   </div>
                   {formData.type === "BUY" && (
+                    <div className="space-y-2">
+                      <Label className="text-slate-300">Loại tài khoản</Label>
+                      <Select
+                        value={formData.accountType}
+                        onValueChange={(value: AccountType) =>
+                          setFormData({ ...formData, accountType: value })
+                        }
+                      >
+                        <SelectTrigger className="bg-slate-800 border-slate-600 text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-slate-800 border-slate-700">
+                          <SelectItem
+                            value="NORMAL"
+                            className="text-slate-200 hover:bg-slate-700"
+                          >
+                            Tài khoản thường
+                          </SelectItem>
+                          <SelectItem
+                            value="MARGIN"
+                            className="text-orange-400 hover:bg-slate-700"
+                          >
+                            Tài khoản vay (margin)
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {formData.type === "BUY" && (
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
@@ -753,6 +791,9 @@ export default function LongTermOrdersPage() {
                     <TableHead className="text-slate-300 font-semibold">
                       Loại
                     </TableHead>
+                    <TableHead className="text-slate-300 font-semibold">
+                      TK
+                    </TableHead>
                     <TableHead className="text-slate-300 font-semibold text-right">
                       SL
                     </TableHead>
@@ -772,6 +813,9 @@ export default function LongTermOrdersPage() {
                       Giá vốn TB
                     </TableHead>
                     <TableHead className="text-slate-300 font-semibold text-right">
+                      Phí margin
+                    </TableHead>
+                    <TableHead className="text-slate-300 font-semibold text-right">
                       Lợi nhuận
                     </TableHead>
                     <TableHead className="text-slate-300 font-semibold text-right">
@@ -783,7 +827,7 @@ export default function LongTermOrdersPage() {
                   {orders.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={14}
+                        colSpan={16}
                         className="text-center text-slate-500 py-8"
                       >
                         Chưa có lệnh giao dịch nào
@@ -836,6 +880,17 @@ export default function LongTermOrdersPage() {
                               {order.type === "BUY" ? "MUA" : "BÁN"}
                             </Badge>
                           </TableCell>
+                          <TableCell>
+                            {order.accountType === "MARGIN" ? (
+                              <Badge className="bg-orange-500/20 text-orange-400 hover:bg-orange-500/30">
+                                Vay
+                              </Badge>
+                            ) : (
+                              <span className="text-slate-500 text-sm">
+                                Thường
+                              </span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right text-slate-200">
                             {formatCurrency(order.quantity)}
                           </TableCell>
@@ -863,6 +918,11 @@ export default function LongTermOrdersPage() {
                           </TableCell>
                           <TableCell className="text-right text-slate-400">
                             {formatCurrency(order.avgCost)}
+                          </TableCell>
+                          <TableCell className="text-right text-orange-400">
+                            {order.type === "SELL" && (order.marginFee ?? 0) > 0
+                              ? formatCurrency(order.marginFee ?? 0)
+                              : "-"}
                           </TableCell>
                           <TableCell
                             className={`text-right font-semibold ${

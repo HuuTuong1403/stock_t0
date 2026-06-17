@@ -41,6 +41,7 @@ interface StockCompany {
   buyFeeRate: number;
   sellFeeRate: number;
   taxRate: number;
+  marginFeeRate: number;
   isDefault: boolean;
   createdAt: string;
 }
@@ -57,6 +58,7 @@ export default function StockCompaniesPage() {
     buyFeeRate: "0.15",
     sellFeeRate: "0.15",
     taxRate: "0.1",
+    marginFeeRate: "0",
     isDefault: false,
   });
 
@@ -84,6 +86,7 @@ export default function StockCompaniesPage() {
         buyFeeRate: parseFloat(formData.buyFeeRate) / 100,
         sellFeeRate: parseFloat(formData.sellFeeRate) / 100,
         taxRate: parseFloat(formData.taxRate) / 100,
+        marginFeeRate: parseFloat(formData.marginFeeRate) / 100,
         isDefault: formData.isDefault,
       };
 
@@ -111,6 +114,7 @@ export default function StockCompaniesPage() {
       buyFeeRate: (company.buyFeeRate * 100).toString(),
       sellFeeRate: (company.sellFeeRate * 100).toString(),
       taxRate: (company.taxRate * 100).toString(),
+      marginFeeRate: ((company.marginFeeRate ?? 0) * 100).toString(),
       isDefault: company.isDefault,
     });
     setIsDialogOpen(true);
@@ -146,6 +150,7 @@ export default function StockCompaniesPage() {
       buyFeeRate: "0.15",
       sellFeeRate: "0.15",
       taxRate: "0.1",
+      marginFeeRate: "0",
       isDefault: false,
     });
   };
@@ -206,7 +211,7 @@ export default function StockCompaniesPage() {
                     required
                   />
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-slate-300">Phí mua (%)</Label>
                     <Input
@@ -251,6 +256,23 @@ export default function StockCompaniesPage() {
                       }
                       className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500"
                       required
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-slate-300">Lãi margin (%/năm)</Label>
+                    <Input
+                      type="number"
+                      placeholder="13.5"
+                      value={formData.marginFeeRate}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          marginFeeRate: e.target.value,
+                        })
+                      }
+                      className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500"
                       min="0"
                       step="0.01"
                     />
@@ -328,6 +350,9 @@ export default function StockCompaniesPage() {
                       Thuế bán
                     </TableHead>
                     <TableHead className="text-slate-300 font-semibold text-right">
+                      Lãi margin
+                    </TableHead>
+                    <TableHead className="text-slate-300 font-semibold text-right">
                       Thao tác
                     </TableHead>
                   </TableRow>
@@ -336,7 +361,7 @@ export default function StockCompaniesPage() {
                   {companies.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={6}
+                        colSpan={7}
                         className="text-center text-slate-500 py-8"
                       >
                         Chưa có công ty chứng khoán nào
@@ -372,6 +397,13 @@ export default function StockCompaniesPage() {
                         </TableCell>
                         <TableCell className="text-right text-amber-400">
                           {formatPercent(company.taxRate * 100)}
+                        </TableCell>
+                        <TableCell className="text-right text-orange-400">
+                          {company.marginFeeRate
+                            ? `${formatPercent(
+                                company.marginFeeRate * 100
+                              )}/năm`
+                            : "-"}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">

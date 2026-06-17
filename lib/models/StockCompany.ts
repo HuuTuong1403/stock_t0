@@ -5,6 +5,7 @@ export interface IStockCompany extends Document {
   buyFeeRate: number;
   sellFeeRate: number;
   taxRate: number;
+  marginFeeRate: number; // [Lãi suất margin/năm dạng thập phân, vd 0.135 = 13.5%/năm]
   isDefault: boolean;
   userId: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -35,6 +36,11 @@ const StockCompanySchema = new mongoose.Schema(
       required: [true, "Thuế là bắt buộc"],
       default: 0.001, // 0.1%
       min: [0, "Thuế không được âm"],
+    },
+    marginFeeRate: {
+      type: Number,
+      default: 0, // Lãi suất margin/năm, vd 0.135 = 13.5%/năm
+      min: [0, "Lãi suất margin không được âm"],
     },
     isDefault: {
       type: Boolean,

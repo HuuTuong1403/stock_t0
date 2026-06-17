@@ -10,6 +10,7 @@ export async function GET() {
         "Mã CP": "VIC",
         "CTCK": "ID của công ty chứng khoán",
         "Loại": "BUY",
+        "Loại TK": "Thường",
         "Số lượng": 1000,
         "Giá": 50000,
       },
@@ -25,6 +26,7 @@ export async function GET() {
       { wch: 10 }, // Mã CP
       { wch: 30 }, // CTCK
       { wch: 8 }, // Loại
+      { wch: 10 }, // Loại TK
       { wch: 12 }, // Số lượng
       { wch: 12 }, // Giá
     ];
