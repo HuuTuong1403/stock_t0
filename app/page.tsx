@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import type { DateRange } from "react-day-picker";
 import {
   Card,
   CardContent,
@@ -34,6 +35,7 @@ import axiosClient from "@/lib/axiosClient";
 import { getErrorMessage } from "@/lib/utils/error";
 import { MonthlyProfitChart } from "@/components/MonthlyProfitChart";
 import { CumulativeProfitChart } from "@/components/CumulativeProfitChart";
+import { DateRangePicker } from "@/components/DateRangePicker";
 import { PortfolioAllocationChart } from "@/components/PortfolioAllocationChart";
 import { SortableTableHead } from "@/components/SortableTableHead";
 import { FlipTableBody } from "@/components/FlipTableBody";
@@ -47,6 +49,10 @@ import {
 import { DashboardSkeleton } from "@/components/skeletons/DashboardSkeleton";
 import { sortTableData, useTableSort } from "@/lib/hooks/use-table-sort";
 import { useAutoRefresh } from "@/lib/hooks/use-auto-refresh";
+import {
+  filterByMonthRange,
+  recalculateCumulative,
+} from "@/lib/utils/month-range-filter";
 
 interface Stats {
   counts: {
@@ -192,6 +198,12 @@ export default function DashboardPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [monthlyProfitRange, setMonthlyProfitRange] = useState<
+    DateRange | undefined
+  >();
+  const [cumulativeProfitRange, setCumulativeProfitRange] = useState<
+    DateRange | undefined
+  >();
 
   const recentOrdersSort = useTableSort();
   const combinedSort = useTableSort();
@@ -372,6 +384,25 @@ export default function DashboardPage() {
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
   }, [portfolioItems]);
+
+  const filteredMonthlyProfit = useMemo(
+    () =>
+      filterByMonthRange(
+        stats?.monthlyProfit ?? [],
+        monthlyProfitRange?.from,
+        monthlyProfitRange?.to,
+      ),
+    [stats?.monthlyProfit, monthlyProfitRange],
+  );
+
+  const filteredCumulativeProfit = useMemo(() => {
+    const filtered = filterByMonthRange(
+      stats?.cumulativeProfit ?? [],
+      cumulativeProfitRange?.from,
+      cumulativeProfitRange?.to,
+    );
+    return recalculateCumulative(filtered);
+  }, [stats?.cumulativeProfit, cumulativeProfitRange]);
 
   const sortedPortfolio = useMemo(
     () =>
@@ -779,16 +810,30 @@ export default function DashboardPage() {
       {/* Monthly Profit Chart */}
       {stats?.monthlyProfit && stats.monthlyProfit.length > 0 && (
         <Card className="bg-slate-800/50 border-slate-700/50">
-          <CardHeader>
-            <CardTitle className="text-white">
-              Lãi/lỗ theo tháng (T0 + Dài hạn)
-            </CardTitle>
-            <CardDescription className="text-slate-400">
-              6 tháng gần nhất — vàng: T0, xanh dương: dài hạn
-            </CardDescription>
+          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle className="text-white">
+                Lãi/lỗ theo tháng (T0 + Dài hạn)
+              </CardTitle>
+              <CardDescription className="text-slate-400">
+                {monthlyProfitRange?.from
+                  ? "Theo khoảng ngày đã chọn — vàng: T0, xanh dương: dài hạn"
+                  : "Tất cả dữ liệu — vàng: T0, xanh dương: dài hạn"}
+              </CardDescription>
+            </div>
+            <DateRangePicker
+              value={monthlyProfitRange}
+              onChange={setMonthlyProfitRange}
+            />
           </CardHeader>
           <CardContent>
-            <MonthlyProfitChart data={stats.monthlyProfit} />
+            {filteredMonthlyProfit.length > 0 ? (
+              <MonthlyProfitChart data={filteredMonthlyProfit} />
+            ) : (
+              <div className="flex h-[320px] items-center justify-center text-slate-500">
+                Không có dữ liệu trong khoảng ngày đã chọn
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -796,17 +841,31 @@ export default function DashboardPage() {
       {/* Cumulative Realized Profit Chart */}
       {stats?.cumulativeProfit && stats.cumulativeProfit.length > 0 && (
         <Card className="bg-slate-800/50 border-slate-700/50">
-          <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-emerald-400" />
-              Lãi/lỗ thực hiện lũy kế
-            </CardTitle>
-            <CardDescription className="text-slate-400">
-              Tổng lãi/lỗ đã thực hiện (T0 + dài hạn) cộng dồn theo thời gian
-            </CardDescription>
+          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <CardTitle className="text-white flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-emerald-400" />
+                Lãi/lỗ thực hiện lũy kế
+              </CardTitle>
+              <CardDescription className="text-slate-400">
+                {cumulativeProfitRange?.from
+                  ? "Lũy kế trong khoảng ngày đã chọn (T0 + dài hạn)"
+                  : "Tổng lãi/lỗ đã thực hiện (T0 + dài hạn) cộng dồn theo thời gian"}
+              </CardDescription>
+            </div>
+            <DateRangePicker
+              value={cumulativeProfitRange}
+              onChange={setCumulativeProfitRange}
+            />
           </CardHeader>
           <CardContent>
-            <CumulativeProfitChart data={stats.cumulativeProfit} />
+            {filteredCumulativeProfit.length > 0 ? (
+              <CumulativeProfitChart data={filteredCumulativeProfit} />
+            ) : (
+              <div className="flex h-[320px] items-center justify-center text-slate-500">
+                Không có dữ liệu trong khoảng ngày đã chọn
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
