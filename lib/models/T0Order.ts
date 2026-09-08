@@ -1,6 +1,7 @@
 import mongoose, { Document, Model, Types } from "mongoose";
 import StockUser from "./StockUser";
 import StockCompany, { IStockCompany } from "./StockCompany";
+import { roundToPriceScale } from "@/lib/utils/price-scale";
 
 export interface IT0Order extends Document {
   tradeDate: Date;
@@ -147,15 +148,17 @@ T0OrderSchema.pre("save", async function () {
     company = companyDoc;
   }
 
-  doc.buyValue = doc.quantity * doc.buyPrice;
-  doc.sellValue = doc.quantity * doc.sellPrice;
+  doc.buyPrice = roundToPriceScale(doc.buyPrice);
+  doc.sellPrice = roundToPriceScale(doc.sellPrice);
+  doc.buyValue = roundToPriceScale(doc.quantity * doc.buyPrice);
+  doc.sellValue = roundToPriceScale(doc.quantity * doc.sellPrice);
   doc.buyFeeRate = company.buyFeeRate;
   doc.sellFeeRate = company.sellFeeRate;
   doc.taxRate = company.taxRate;
   doc.buyFee = Math.round(doc.buyValue * company.buyFeeRate);
   doc.sellFee = Math.round(doc.sellValue * company.sellFeeRate);
   doc.sellTax = Math.round(doc.sellValue * company.taxRate);
-  doc.profitBeforeFees = doc.sellValue - doc.buyValue;
+  doc.profitBeforeFees = roundToPriceScale(doc.sellValue - doc.buyValue);
   doc.profitAfterFees =
     doc.profitBeforeFees - doc.buyFee - doc.sellFee - doc.sellTax;
 });

@@ -3,7 +3,11 @@ import { Types } from "mongoose";
 import dbConnect from "@/lib/mongodb";
 import { Dividend, LongTermOrder } from "@/lib/models";
 import { requireAuth } from "@/lib/services/auth";
-import { getCashDividendPriceReduction } from "@/lib/constants/dividend";
+import {
+  getStockSplitRatio,
+  revertCashDividend,
+  revertStockDividend,
+} from "@/lib/utils/dividend-adjust";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -104,93 +108,23 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     let revertedCount = 0;
 
-    // If dividend was used (adjustments were made), revert them
     if (dividend.isUsed) {
-      // Find all long-term orders that were adjusted
       const longTermOrders = await LongTermOrder.find({
         stockCode: dividend.stockCode,
         tradeDate: { $lt: dividend.dividendDate },
         userId: user._id,
       });
 
-      if (longTermOrders.length > 0) {
+      const splitRatio = getStockSplitRatio(dividend.value);
+
+      for (const order of longTermOrders) {
         if (dividend.type === "STOCK") {
-          // REVERT STOCK DIVIDEND: Giảm số lượng, tăng giá về ban đầu
-          const splitRatio = 1 + dividend.value / 100; // e.g., 10% -> 1.1
-
-          // Calculate current total quantity
-          const totalCurrentQuantity = longTermOrders.reduce(
-            (sum, order) => sum + order.quantity,
-            0
-          );
-
-          // Calculate original total quantity (before split)
-          const totalOriginalQuantity = Math.round(
-            totalCurrentQuantity / splitRatio
-          );
-
-          // Adjust each order back proportionally
-          let totalAdjusted = 0;
-          const originalQuantities: number[] = [];
-
-          for (let i = 0; i < longTermOrders.length; i++) {
-            const order = longTermOrders[i];
-            const proportion = order.quantity / totalCurrentQuantity;
-            const originalQuantity = Math.round(
-              totalOriginalQuantity * proportion
-            );
-
-            originalQuantities.push(originalQuantity);
-            totalAdjusted += originalQuantity;
-          }
-
-          // Fix rounding differences
-          let difference = totalOriginalQuantity - totalAdjusted;
-          while (difference !== 0) {
-            for (
-              let i = 0;
-              i < originalQuantities.length && difference !== 0;
-              i++
-            ) {
-              if (difference > 0) {
-                originalQuantities[i]++;
-                difference--;
-              } else {
-                if (originalQuantities[i] > 0) {
-                  originalQuantities[i]--;
-                  difference++;
-                }
-              }
-            }
-          }
-
-          // Apply the original quantities and prices
-          for (let i = 0; i < longTermOrders.length; i++) {
-            const order = longTermOrders[i];
-
-            order.quantity = originalQuantities[i];
-
-            // Original price = current price * split ratio
-            order.price = Math.floor(order.price * splitRatio);
-
-            // For SELL orders, revert costBasis
-            if (order.type === "SELL" && order.costBasis > 0) {
-              order.costBasis = Math.floor(order.costBasis / splitRatio);
-            }
-
-            await order.save();
-            revertedCount++;
-          }
+          revertStockDividend(order, splitRatio);
         } else {
-          // REVERT CASH DIVIDEND: Cộng lại số tiền đã trừ (mệnh giá 10.000đ × %)
-          const priceIncrease = getCashDividendPriceReduction(dividend.value);
-
-          for (const order of longTermOrders) {
-            order.price = order.price + priceIncrease;
-            await order.save();
-            revertedCount++;
-          }
+          revertCashDividend(order, dividend.value);
         }
+        await order.save();
+        revertedCount++;
       }
     }
 

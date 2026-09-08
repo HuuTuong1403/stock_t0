@@ -3,19 +3,22 @@ import dbConnect from "@/lib/mongodb";
 import { Dividend, LongTermOrder } from "@/lib/models";
 import { requireAuth } from "@/lib/services/auth";
 import { getCashDividendPriceReduction } from "@/lib/constants/dividend";
+import {
+  applyCashDividend,
+  applyStockDividend,
+  getStockSplitRatio,
+} from "@/lib/utils/dividend-adjust";
 
 /**
  * Adjust stock orders based on dividend (both STOCK and CASH)
  *
  * STOCK DIVIDEND (cổ tức cổ phiếu):
  *   - Số lượng cổ phiếu tăng theo tỷ lệ (1 + value/100)
- *   - Giá giảm tương ứng để giữ tổng giá trị
- *   - VD: 10% stock dividend → 100 cổ phiếu @ 50k → 110 cổ phiếu @ 45.45k
+ *   - Giá giảm tương ứng theo thang 1000
  *
  * CASH DIVIDEND (cổ tức tiền mặt):
  *   - Số lượng cổ phiếu không đổi
  *   - Giá giảm theo mệnh giá 10.000đ × tỷ lệ %
- *   - VD: 5% cash dividend → giá giảm 500đ (10.000 × 5%)
  *
  * POST /api/dividends/adjust-orders
  * Body: { dividendId: string }
@@ -38,7 +41,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get dividend information
     const dividend = await Dividend.findOne({
       _id: dividendId,
       userId: user._id,
@@ -51,15 +53,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find all long-term orders before the dividend date with the same stock code
-    // Note: T0 orders are intraday trades (closed positions), so they are NOT adjusted
+    if (dividend.isUsed) {
+      return NextResponse.json(
+        { error: "Cổ tức này đã được điều chỉnh lệnh" },
+        { status: 400 }
+      );
+    }
+
     const longTermOrders = await LongTermOrder.find({
       stockCode: dividend.stockCode,
       tradeDate: { $lt: dividend.dividendDate },
       userId: user._id,
     });
-
-    let adjustedCount = 0;
 
     if (longTermOrders.length === 0) {
       return NextResponse.json({
@@ -68,86 +73,19 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // ===== Adjust based on dividend type =====
-    if (dividend.type === "STOCK") {
-      // STOCK DIVIDEND: Tăng số lượng, giảm giá
-      const splitRatio = 1 + dividend.value / 100; // e.g., 10% -> 1.1
+    const splitRatio = getStockSplitRatio(dividend.value);
+    let adjustedCount = 0;
 
-      // Calculate total quantity
-      const totalLTQuantity = longTermOrders.reduce(
-        (sum, order) => sum + order.quantity,
-        0
-      );
-
-      // Calculate new total quantity (round properly to avoid fractional shares)
-      const newTotalLTQuantity = Math.round(totalLTQuantity * splitRatio);
-
-      // Adjust each order proportionally with proper rounding
-      let totalAdjusted = 0;
-      const adjustedQuantities: number[] = [];
-
-      for (let i = 0; i < longTermOrders.length; i++) {
-        const order = longTermOrders[i];
-        const proportion = order.quantity / totalLTQuantity;
-        const adjustedQuantity = Math.round(newTotalLTQuantity * proportion);
-
-        adjustedQuantities.push(adjustedQuantity);
-        totalAdjusted += adjustedQuantity;
+    for (const order of longTermOrders) {
+      if (dividend.type === "STOCK") {
+        applyStockDividend(order, splitRatio);
+      } else {
+        applyCashDividend(order, dividend.value);
       }
-
-      // Fix rounding differences to ensure total matches exactly
-      let difference = newTotalLTQuantity - totalAdjusted;
-      while (difference !== 0) {
-        for (
-          let i = 0;
-          i < adjustedQuantities.length && difference !== 0;
-          i++
-        ) {
-          if (difference > 0) {
-            adjustedQuantities[i]++;
-            difference--;
-          } else {
-            if (adjustedQuantities[i] > 0) {
-              adjustedQuantities[i]--;
-              difference++;
-            }
-          }
-        }
-      }
-
-      // Apply the adjusted quantities and prices
-      for (let i = 0; i < longTermOrders.length; i++) {
-        const order = longTermOrders[i];
-
-        order.quantity = adjustedQuantities[i];
-
-        // New price = old price / split ratio (round down)
-        order.price = Math.floor(order.price / splitRatio);
-
-        // For BUY orders, costBasis will be recalculated in middleware
-        // For SELL orders, adjust costBasis proportionally
-        if (order.type === "SELL" && order.costBasis > 0) {
-          // costBasis increases proportionally with quantity
-          order.costBasis = Math.floor(order.costBasis * splitRatio);
-        }
-
-        // Recalculate will happen in pre-save middleware
-        await order.save();
-        adjustedCount++;
-      }
-    } else {
-      // CASH DIVIDEND: Giá giảm cố định theo mệnh giá 10.000đ, số lượng không đổi
-      const priceReduction = getCashDividendPriceReduction(dividend.value);
-
-      for (const order of longTermOrders) {
-        order.price = Math.max(0, order.price - priceReduction);
-
-        await order.save();
-        adjustedCount++;
-      }
+      await order.save();
+      adjustedCount++;
     }
 
-    // Mark dividend as used
     await Dividend.findByIdAndUpdate(dividendId, { isUsed: true });
 
     return NextResponse.json({

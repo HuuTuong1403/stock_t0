@@ -1,6 +1,7 @@
 import mongoose, { Document, Model, Types } from "mongoose";
 import StockUser from "./StockUser";
 import StockCompany, { IStockCompany } from "./StockCompany";
+import { roundToPriceScale } from "@/lib/utils/price-scale";
 
 export type OrderType = "BUY" | "SELL";
 
@@ -169,7 +170,7 @@ const LongTermOrderSchema = new mongoose.Schema(
 // Pre-save middleware to calculate values based on fee rates
 LongTermOrderSchema.pre("save", async function () {
   const doc = this as ILongTermOrder;
-  const value = doc.quantity * doc.price;
+  const value = roundToPriceScale(doc.quantity * doc.price);
 
   // If company is not set, get it from stockUser
   if (!doc.company) {
@@ -252,7 +253,7 @@ LongTermOrderSchema.pre("save", async function () {
         ? 0
         : Math.round(value * company.buyFeeRate);
       doc.tax = 0;
-      doc.costBasis = value + doc.fee;
+      doc.costBasis = roundToPriceScale(value + doc.fee);
       doc.profit = 0;
       doc.marginFee = 0;
 
@@ -262,12 +263,12 @@ LongTermOrderSchema.pre("save", async function () {
         const newTotalQuantity = totalBuyQuantity + doc.quantity;
         const newTotalCostBasis =
           previousAvgCost * totalBuyQuantity + doc.costBasis;
-        doc.avgCost = Math.round(newTotalCostBasis / newTotalQuantity);
+        doc.avgCost = roundToPriceScale(newTotalCostBasis / newTotalQuantity);
       } else {
         // First BUY order or no previous avgCost
         const newTotalQuantity = totalBuyQuantity + doc.quantity;
         const newTotalCostBasis = totalBuyCostBasis + doc.costBasis;
-        doc.avgCost = Math.round(newTotalCostBasis / newTotalQuantity);
+        doc.avgCost = roundToPriceScale(newTotalCostBasis / newTotalQuantity);
       }
     } else {
       // SELL - use sell fee rate
@@ -277,7 +278,7 @@ LongTermOrderSchema.pre("save", async function () {
       if (previousAvgCost > 0) {
         // Use avgCost from the most recent order (BUY or SELL)
         doc.avgCost = previousAvgCost;
-        doc.costBasis = previousAvgCost * doc.quantity;
+        doc.costBasis = roundToPriceScale(previousAvgCost * doc.quantity);
 
         const sellValue = doc.quantity * doc.price;
         const feeAndTaxRate = company.sellFeeRate + company.taxRate;
@@ -288,10 +289,10 @@ LongTermOrderSchema.pre("save", async function () {
       } else if (totalBuyQuantity > 0) {
         // Fallback: calculate weighted average if no previous order has avgCost
         const averageCost = totalBuyCostBasis / totalBuyQuantity;
-        const averageCostPerShare = Math.round(averageCost);
+        const averageCostPerShare = roundToPriceScale(averageCost);
 
         doc.avgCost = averageCostPerShare;
-        doc.costBasis = averageCostPerShare * doc.quantity;
+        doc.costBasis = roundToPriceScale(averageCostPerShare * doc.quantity);
 
         const sellValue = doc.quantity * doc.price;
         const feeAndTaxRate = company.sellFeeRate + company.taxRate;
@@ -322,7 +323,7 @@ LongTermOrderSchema.pre("save", async function () {
         ? 0
         : Math.round(value * company.buyFeeRate);
       doc.tax = 0;
-      doc.costBasis = value + doc.fee;
+      doc.costBasis = roundToPriceScale(value + doc.fee);
       doc.profit = 0;
       doc.marginFee = 0;
     } else {
