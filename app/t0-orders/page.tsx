@@ -89,6 +89,7 @@ export default function T0OrdersPage() {
   const [convertAccountType, setConvertAccountType] = useState<
     "NORMAL" | "MARGIN"
   >("NORMAL");
+  const [convertQuantity, setConvertQuantity] = useState("");
   const [convertSubmitting, setConvertSubmitting] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -196,17 +197,30 @@ export default function T0OrdersPage() {
   const openConvertDialog = (order: T0Order) => {
     setConvertingOrder(order);
     setConvertAccountType("NORMAL");
+    setConvertQuantity(order.quantity.toString());
   };
 
   const handleConvertToLongTerm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!convertingOrder) return;
 
+    const quantity = parseInt(convertQuantity, 10);
+    if (
+      !Number.isInteger(quantity) ||
+      quantity < 1 ||
+      quantity > convertingOrder.quantity
+    ) {
+      toast.error(
+        `Số lượng chuyển phải từ 1 đến ${convertingOrder.quantity}`
+      );
+      return;
+    }
+
     setConvertSubmitting(true);
     try {
       await axiosClient.post(
         `/t0-orders/${convertingOrder._id}/convert-to-long-term`,
-        { accountType: convertAccountType }
+        { accountType: convertAccountType, quantity }
       );
       toast.success("Đã chuyển lệnh T0 thành lệnh dài hạn");
       setConvertingOrder(null);
@@ -290,6 +304,9 @@ export default function T0OrdersPage() {
   const openNewDialog = () => {
     setEditingOrder(null);
     resetForm();
+    if (filterStock && filterStock !== "all" && filterStock.includes("|")) {
+      setFormData((prev) => ({ ...prev, stockCode: filterStock }));
+    }
     setIsDialogOpen(true);
   };
 
@@ -769,8 +786,8 @@ export default function T0OrdersPage() {
               Chuyển thành lệnh dài hạn
             </DialogTitle>
             <DialogDescription className="text-slate-400">
-              Giá mua lấy từ lệnh T0. Chọn loại tài khoản để tạo lệnh MUA dài
-              hạn, lệnh T0 gốc sẽ bị xóa.
+              Giá mua lấy từ lệnh T0. Chuyển hết thì xóa lệnh gốc; chuyển một
+              phần thì giữ lệnh gốc với số lượng còn lại.
             </DialogDescription>
           </DialogHeader>
           {convertingOrder && (
@@ -784,7 +801,7 @@ export default function T0OrdersPage() {
                     </p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-xs text-slate-500">Số lượng</p>
+                    <p className="text-xs text-slate-500">Số lượng gốc</p>
                     <p className="text-slate-200">
                       {formatCurrency(convertingOrder.quantity)}
                     </p>
@@ -795,6 +812,20 @@ export default function T0OrdersPage() {
                       {formatCurrency(convertingOrder.buyPrice)}
                     </p>
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-slate-300">Số lượng chuyển</Label>
+                  <Input
+                    type="number"
+                    value={convertQuantity}
+                    onChange={(e) => setConvertQuantity(e.target.value)}
+                    className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500"
+                    required
+                    min={1}
+                    max={convertingOrder.quantity}
+                    step="1"
+                    placeholder={`Tối đa ${convertingOrder.quantity}`}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-slate-300">Loại tài khoản</Label>

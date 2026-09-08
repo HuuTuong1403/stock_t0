@@ -105,6 +105,7 @@ export default function LongTermOrdersPage() {
     formatDateInput(new Date())
   );
   const [convertSellPrice, setConvertSellPrice] = useState("");
+  const [convertQuantity, setConvertQuantity] = useState("");
   const [convertSubmitting, setConvertSubmitting] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -127,6 +128,9 @@ export default function LongTermOrdersPage() {
     profit: "",
     isAdditionalIssuance: false,
   });
+  const [sellRemainingQty, setSellRemainingQty] = useState<number | null>(
+    null
+  );
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -169,6 +173,52 @@ export default function LongTermOrdersPage() {
     setSelectedIds(new Set());
   }, [filterStock, filterType, filterStartDate, filterEndDate]);
 
+  useEffect(() => {
+    if (
+      !isDialogOpen ||
+      formData.type !== "SELL" ||
+      !formData.stockCode.includes("|")
+    ) {
+      setSellRemainingQty(null);
+      return;
+    }
+
+    const [stockCode, companyId] = formData.stockCode.split("|");
+    if (!stockCode || !companyId || stockCode === "all") {
+      setSellRemainingQty(null);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await axiosClient.get("/long-term-orders", {
+          params: { stockCode, companyId },
+        });
+        if (cancelled) return;
+        const list = (data as LongTermOrder[]) || [];
+        const totalBuy = list
+          .filter((o) => o.type === "BUY")
+          .reduce((sum, o) => sum + o.quantity, 0);
+        const totalSell = list
+          .filter((o) => o.type === "SELL")
+          .reduce((sum, o) => sum + o.quantity, 0);
+        let remaining = totalBuy - totalSell;
+        if (editingOrder?.type === "SELL") {
+          remaining += editingOrder.quantity;
+        }
+        setSellRemainingQty(remaining);
+      } catch (error: unknown) {
+        console.error("Error fetching remaining quantity:", error);
+        if (!cancelled) setSellRemainingQty(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isDialogOpen, formData.type, formData.stockCode, editingOrder]);
+
   const fetchStockUsers = async () => {
     try {
       const { data } = await axiosClient.get("/stock-users");
@@ -184,13 +234,29 @@ export default function LongTermOrdersPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const quantity = parseInt(formData.quantity, 10);
+    if (
+      formData.type === "SELL" &&
+      sellRemainingQty !== null &&
+      (!Number.isInteger(quantity) ||
+        quantity < 1 ||
+        quantity > sellRemainingQty)
+    ) {
+      toast.error(
+        sellRemainingQty < 1
+          ? "Không còn số lượng để bán"
+          : `Số lượng bán phải từ 1 đến ${sellRemainingQty}`
+      );
+      return;
+    }
+
     try {
       const [stockCode, company] = formData.stockCode.split("|");
       const payload: Record<string, unknown> = {
         tradeDate: formData.tradeDate,
         stockCode,
         type: formData.type,
-        quantity: parseInt(formData.quantity),
+        quantity,
         price: parseFloat(formData.price),
         company,
       };
@@ -242,11 +308,24 @@ export default function LongTermOrdersPage() {
     setConvertingOrder(order);
     setConvertTradeDate(formatDateInput(new Date()));
     setConvertSellPrice("");
+    setConvertQuantity(order.quantity.toString());
   };
 
   const handleConvertToT0 = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!convertingOrder) return;
+
+    const quantity = parseInt(convertQuantity, 10);
+    if (
+      !Number.isInteger(quantity) ||
+      quantity < 1 ||
+      quantity > convertingOrder.quantity
+    ) {
+      toast.error(
+        `Số lượng chuyển phải từ 1 đến ${convertingOrder.quantity}`
+      );
+      return;
+    }
 
     setConvertSubmitting(true);
     try {
@@ -255,6 +334,7 @@ export default function LongTermOrdersPage() {
         {
           tradeDate: convertTradeDate,
           sellPrice: parseFloat(convertSellPrice),
+          quantity,
         }
       );
       toast.success("Đã chuyển lệnh dài hạn thành lệnh T0");
@@ -343,6 +423,9 @@ export default function LongTermOrdersPage() {
   const openNewDialog = () => {
     setEditingOrder(null);
     resetForm();
+    if (filterStock && filterStock !== "all" && filterStock.includes("|")) {
+      setFormData((prev) => ({ ...prev, stockCode: filterStock }));
+    }
     setIsDialogOpen(true);
   };
 
@@ -553,17 +636,38 @@ export default function LongTermOrdersPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label className="text-slate-300">Số lượng</Label>
+                      <div className="flex items-center justify-between gap-2">
+                        <Label className="text-slate-300">Số lượng</Label>
+                        {formData.type === "SELL" &&
+                          sellRemainingQty !== null && (
+                            <span className="text-xs text-slate-400">
+                              Còn lại:{" "}
+                              <span className="font-medium text-cyan-400">
+                                {formatCurrency(sellRemainingQty)}
+                              </span>
+                            </span>
+                          )}
+                      </div>
                       <Input
                         type="number"
-                        placeholder="VD: 1000"
+                        placeholder={
+                          formData.type === "SELL" && sellRemainingQty !== null
+                            ? `Tối đa ${sellRemainingQty}`
+                            : "VD: 1000"
+                        }
                         value={formData.quantity}
                         onChange={(e) =>
                           setFormData({ ...formData, quantity: e.target.value })
                         }
                         className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500"
                         required
-                        min="1"
+                        min={1}
+                        max={
+                          formData.type === "SELL" && sellRemainingQty !== null
+                            ? sellRemainingQty
+                            : undefined
+                        }
+                        step="1"
                       />
                     </div>
                     <div className="space-y-2">
@@ -1038,8 +1142,8 @@ export default function LongTermOrdersPage() {
               Chuyển thành lệnh T0
             </DialogTitle>
             <DialogDescription className="text-slate-400">
-              Giá mua lấy từ lệnh dài hạn. Nhập ngày giao dịch và giá bán để tạo
-              lệnh T0, lệnh dài hạn gốc sẽ bị xóa.
+              Giá mua lấy từ lệnh dài hạn. Chuyển hết thì xóa lệnh gốc; chuyển
+              một phần thì giữ lệnh gốc với số lượng còn lại.
             </DialogDescription>
           </DialogHeader>
           {convertingOrder && (
@@ -1053,7 +1157,7 @@ export default function LongTermOrdersPage() {
                     </p>
                   </div>
                   <div className="space-y-1">
-                    <p className="text-xs text-slate-500">Số lượng</p>
+                    <p className="text-xs text-slate-500">Số lượng gốc</p>
                     <p className="text-slate-200">
                       {formatCurrency(convertingOrder.quantity)}
                     </p>
@@ -1064,6 +1168,20 @@ export default function LongTermOrdersPage() {
                       {formatCurrency(convertingOrder.price)}
                     </p>
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-slate-300">Số lượng chuyển</Label>
+                  <Input
+                    type="number"
+                    value={convertQuantity}
+                    onChange={(e) => setConvertQuantity(e.target.value)}
+                    className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500"
+                    required
+                    min={1}
+                    max={convertingOrder.quantity}
+                    step="1"
+                    placeholder={`Tối đa ${convertingOrder.quantity}`}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-slate-300">Ngày giao dịch</Label>

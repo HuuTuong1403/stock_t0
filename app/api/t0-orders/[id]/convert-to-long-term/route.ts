@@ -7,6 +7,20 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
+function parseConvertQuantity(
+  raw: unknown,
+  originalQuantity: number
+): number | null {
+  if (raw === undefined || raw === null || raw === "") {
+    return originalQuantity;
+  }
+  const qty = Number(raw);
+  if (!Number.isInteger(qty) || qty < 1 || qty > originalQuantity) {
+    return null;
+  }
+  return qty;
+}
+
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     await dbConnect();
@@ -17,7 +31,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const { user } = auth;
     const { id } = await params;
     const body = await request.json();
-    const { accountType } = body;
+    const { accountType, quantity } = body;
 
     if (accountType !== "NORMAL" && accountType !== "MARGIN") {
       return NextResponse.json(
@@ -38,6 +52,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    const convertQty = parseConvertQuantity(quantity, t0Order.quantity);
+    if (convertQty === null) {
+      return NextResponse.json(
+        {
+          error: `Số lượng chuyển phải là số nguyên từ 1 đến ${t0Order.quantity}`,
+        },
+        { status: 400 }
+      );
+    }
+
     const companyId =
       typeof t0Order.company === "object" &&
       t0Order.company !== null &&
@@ -52,19 +76,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       userId: user._id,
       type: "BUY",
       accountType,
-      quantity: t0Order.quantity,
+      quantity: convertQty,
       price: t0Order.buyPrice,
     });
     await longTermOrder.save();
 
     try {
-      await T0Order.deleteOne({ _id: t0Order._id });
-    } catch (deleteError) {
-      console.error("Error deleting original T0 order:", deleteError);
+      if (convertQty === t0Order.quantity) {
+        await T0Order.deleteOne({ _id: t0Order._id });
+      } else {
+        t0Order.quantity = t0Order.quantity - convertQty;
+        await t0Order.save();
+      }
+    } catch (updateError) {
+      console.error("Error updating original T0 order:", updateError);
       return NextResponse.json(
         {
           error:
-            "Đã tạo lệnh dài hạn nhưng không xóa được lệnh T0 gốc. Vui lòng xóa thủ công.",
+            "Đã tạo lệnh dài hạn nhưng không cập nhật được lệnh T0 gốc. Vui lòng xử lý thủ công.",
           longTermOrder,
         },
         { status: 500 }
