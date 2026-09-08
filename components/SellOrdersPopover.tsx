@@ -26,6 +26,14 @@ interface SellOrdersPopoverProps {
 export function SellOrdersPopover({ stockCode, orders }: SellOrdersPopoverProps) {
   const [open, setOpen] = useState(false);
   const sellOrders = orders ?? [];
+  const totalGain = sellOrders.reduce(
+    (sum, order) => (order.profit > 0 ? sum + order.profit : sum),
+    0
+  );
+  const totalLoss = sellOrders.reduce(
+    (sum, order) => (order.profit < 0 ? sum + order.profit : sum),
+    0
+  );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -112,6 +120,22 @@ export function SellOrdersPopover({ stockCode, orders }: SellOrdersPopoverProps)
             </table>
           </div>
         )}
+
+        <div className="grid grid-cols-2 gap-3 px-4 py-3 border-t border-slate-700 bg-slate-800/50">
+          <div>
+            <p className="text-xs text-slate-500">Tổng lãi</p>
+            <p className="text-sm font-semibold text-emerald-400">
+              {totalGain > 0 ? "+" : ""}
+              {formatCurrency(totalGain)}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-slate-500">Tổng lỗ</p>
+            <p className="text-sm font-semibold text-red-400">
+              {formatCurrency(totalLoss)}
+            </p>
+          </div>
+        </div>
       </PopoverContent>
     </Popover>
   );

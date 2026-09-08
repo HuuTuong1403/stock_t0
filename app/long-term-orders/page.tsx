@@ -36,7 +36,15 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Trash2, TrendingUp, Filter, X } from "lucide-react";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  TrendingUp,
+  Filter,
+  X,
+  ArrowRightLeft,
+} from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency, formatDate, formatDateInput } from "@/lib/format";
 import { ImportExportDialog } from "@/components/ImportExportDialog";
@@ -90,6 +98,14 @@ export default function LongTermOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<LongTermOrder | null>(null);
+  const [convertingOrder, setConvertingOrder] = useState<LongTermOrder | null>(
+    null
+  );
+  const [convertTradeDate, setConvertTradeDate] = useState(
+    formatDateInput(new Date())
+  );
+  const [convertSellPrice, setConvertSellPrice] = useState("");
+  const [convertSubmitting, setConvertSubmitting] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -220,6 +236,35 @@ export default function LongTermOrdersPage() {
       isAdditionalIssuance: order.isAdditionalIssuance ?? false,
     });
     setIsDialogOpen(true);
+  };
+
+  const openConvertDialog = (order: LongTermOrder) => {
+    setConvertingOrder(order);
+    setConvertTradeDate(formatDateInput(new Date()));
+    setConvertSellPrice("");
+  };
+
+  const handleConvertToT0 = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!convertingOrder) return;
+
+    setConvertSubmitting(true);
+    try {
+      await axiosClient.post(
+        `/long-term-orders/${convertingOrder._id}/convert-to-t0`,
+        {
+          tradeDate: convertTradeDate,
+          sellPrice: parseFloat(convertSellPrice),
+        }
+      );
+      toast.success("Đã chuyển lệnh dài hạn thành lệnh T0");
+      setConvertingOrder(null);
+      fetchOrders();
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error) || "Lỗi khi chuyển lệnh");
+    } finally {
+      setConvertSubmitting(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -941,6 +986,17 @@ export default function LongTermOrdersPage() {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
+                              {order.type === "BUY" && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => openConvertDialog(order)}
+                                  className="h-8 w-8 text-slate-400 hover:text-yellow-400 hover:bg-yellow-500/10"
+                                  title="Chuyển thành lệnh T0"
+                                >
+                                  <ArrowRightLeft className="h-4 w-4" />
+                                </Button>
+                              )}
                               <Button
                                 size="icon"
                                 variant="ghost"
@@ -969,6 +1025,91 @@ export default function LongTermOrdersPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={!!convertingOrder}
+        onOpenChange={(open) => {
+          if (!open) setConvertingOrder(null);
+        }}
+      >
+        <DialogContent className="bg-slate-900 border-slate-700 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white">
+              Chuyển thành lệnh T0
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Giá mua lấy từ lệnh dài hạn. Nhập ngày giao dịch và giá bán để tạo
+              lệnh T0, lệnh dài hạn gốc sẽ bị xóa.
+            </DialogDescription>
+          </DialogHeader>
+          {convertingOrder && (
+            <form onSubmit={handleConvertToT0}>
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <p className="text-xs text-slate-500">Mã CP</p>
+                    <p className="font-mono font-semibold text-cyan-400">
+                      {convertingOrder.stockCode}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-slate-500">Số lượng</p>
+                    <p className="text-slate-200">
+                      {formatCurrency(convertingOrder.quantity)}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-slate-500">Giá mua</p>
+                    <p className="text-slate-200">
+                      {formatCurrency(convertingOrder.price)}
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-slate-300">Ngày giao dịch</Label>
+                  <Input
+                    type="date"
+                    value={convertTradeDate}
+                    onChange={(e) => setConvertTradeDate(e.target.value)}
+                    className="bg-slate-800 border-slate-600 text-white"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-slate-300">Giá bán</Label>
+                  <Input
+                    type="number"
+                    placeholder="VD: 25000"
+                    value={convertSellPrice}
+                    onChange={(e) => setConvertSellPrice(e.target.value)}
+                    className="bg-slate-800 border-slate-600 text-white placeholder:text-slate-500"
+                    required
+                    min="0"
+                    step="any"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setConvertingOrder(null)}
+                  className="border-slate-600 text-slate-300 hover:bg-slate-800"
+                >
+                  Hủy
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={convertSubmitting}
+                  className="bg-yellow-500 hover:bg-yellow-600 text-slate-900"
+                >
+                  {convertSubmitting ? "Đang chuyển..." : "Chuyển thành T0"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
