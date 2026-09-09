@@ -210,6 +210,7 @@ LongTermOrderSchema.pre("save", async function () {
   // Calculate avgCost based on previous orders
   if (
     doc.isNew ||
+    this.$locals.forceAvgRecalc ||
     this.isModified("stockCode") ||
     this.isModified("quantity") ||
     this.isModified("price") ||

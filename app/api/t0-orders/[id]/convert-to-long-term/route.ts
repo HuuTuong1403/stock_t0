@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { LongTermOrder, T0Order } from "@/lib/models";
 import { requireAuth } from "@/lib/services/auth";
+import { recalculateSubsequentLongTermOrders } from "@/lib/utils/recalc-subsequent-long-term";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -80,6 +81,30 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       price: t0Order.buyPrice,
     });
     await longTermOrder.save();
+
+    try {
+      await recalculateSubsequentLongTermOrders({
+        _id: longTermOrder._id,
+        userId: longTermOrder.userId,
+        stockCode: longTermOrder.stockCode,
+        company: companyId,
+        tradeDate: longTermOrder.tradeDate,
+        createdAt: longTermOrder.createdAt,
+      });
+    } catch (recalcError) {
+      console.error(
+        "Error recalculating subsequent long-term orders:",
+        recalcError
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Đã tạo lệnh dài hạn nhưng không tính lại được giá TB các lệnh sau. Vui lòng kiểm tra thủ công.",
+          longTermOrder,
+        },
+        { status: 500 }
+      );
+    }
 
     try {
       if (convertQty === t0Order.quantity) {

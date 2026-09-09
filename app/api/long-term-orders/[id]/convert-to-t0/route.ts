@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { LongTermOrder, T0Order } from "@/lib/models";
 import { requireAuth } from "@/lib/services/auth";
+import { recalculateSubsequentLongTermOrders } from "@/lib/utils/recalc-subsequent-long-term";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -95,6 +96,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     });
     await t0Order.save();
 
+    const subsequentAnchor = {
+      _id: longTermOrder._id,
+      userId: longTermOrder.userId,
+      stockCode: longTermOrder.stockCode,
+      company: companyId,
+      tradeDate: longTermOrder.tradeDate,
+      createdAt: longTermOrder.createdAt,
+    };
+
     try {
       if (convertQty === longTermOrder.quantity) {
         await LongTermOrder.deleteOne({ _id: longTermOrder._id });
@@ -108,6 +118,20 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         {
           error:
             "Đã tạo lệnh T0 nhưng không cập nhật được lệnh dài hạn gốc. Vui lòng xử lý thủ công.",
+          t0Order,
+        },
+        { status: 500 }
+      );
+    }
+
+    try {
+      await recalculateSubsequentLongTermOrders(subsequentAnchor);
+    } catch (recalcError) {
+      console.error("Error recalculating subsequent long-term orders:", recalcError);
+      return NextResponse.json(
+        {
+          error:
+            "Đã tạo lệnh T0 nhưng không tính lại được giá TB các lệnh dài hạn sau. Vui lòng kiểm tra thủ công.",
           t0Order,
         },
         { status: 500 }
