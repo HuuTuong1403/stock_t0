@@ -233,7 +233,7 @@ export default function DashboardPage() {
         if (manual) setRefreshing(false);
       }
     },
-    []
+    [],
   );
 
   useEffect(() => {
@@ -278,16 +278,24 @@ export default function DashboardPage() {
     (stats?.longTermSummary.totalProfit || 0);
   const totalProfitLongTermAvg =
     stats?.longTermPortfolio.reduce(
-      (acc, stock) =>
-        acc + (stock.marketPrice - stock.averageCostBasis) * stock.quantity,
+      (acc, stock) => {
+        const held = stock.quantity - stock.quantitySell;
+        if (held > 0) {
+          acc += (stock.marketPrice - stock.averageCostBasis) * held;
+        }
+        return acc;
+      },
+
       0,
     ) || 0;
   const totalProfitLongTermCurrent =
-    stats?.longTermPortfolio.reduce(
-      (acc, stock) =>
-        acc + (stock.marketPrice - stock.currentCostBasis) * stock.quantity,
-      0,
-    ) || 0;
+    stats?.longTermPortfolio.reduce((acc, stock) => {
+      const held = stock.quantity - stock.quantitySell;
+      if (held > 0) {
+        acc += (stock.marketPrice - stock.currentCostBasis) * held;
+      }
+      return acc;
+    }, 0) || 0;
 
   const combinedTotals = stats?.combinedStatsByStock.reduce(
     (acc, stock) => ({
